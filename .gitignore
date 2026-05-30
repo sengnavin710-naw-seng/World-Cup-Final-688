@@ -5,3 +5,6 @@ apps/*/dist/
 coverage/
 .DS_Store
 .env
+*.log
+*.err
+*.tsbuildinfo
