@@ -4,6 +4,13 @@ import type { ParticipantRecord, TeamView } from "../types";
 
 const memoryStore = new Map<string, ParticipantRecord>();
 
+function makeAppError(message: string, code: string, status: number) {
+  const error = new Error(message);
+  (error as Error & { code?: string; status?: number }).code = code;
+  (error as Error & { code?: string; status?: number }).status = status;
+  return error;
+}
+
 function getTeamName(teamCode: string) {
   return teams.find((team) => team.code === teamCode)?.name ?? teamCode;
 }
@@ -55,18 +62,16 @@ export async function getParticipantByDeviceId(deviceId: string) {
 
 function ensureTeamExists(teamCode: string) {
   if (!teams.some((team) => team.code === teamCode)) {
-    const error = new Error("Unknown team");
-    (error as Error & { code?: string; status?: number }).code = "UNKNOWN_TEAM";
-    (error as Error & { code?: string; status?: number }).status = 400;
-    throw error;
+    throw makeAppError("Unknown team", "UNKNOWN_TEAM", 400);
   }
 }
 
 function makeConflictError() {
-  const error = new Error("Selected team is no longer available.");
-  (error as Error & { code?: string; status?: number }).code = "SELECTION_CONFLICT";
-  (error as Error & { code?: string; status?: number }).status = 409;
-  return error;
+  return makeAppError("Selected team is no longer available.", "SELECTION_CONFLICT", 409);
+}
+
+function makeParticipantNotFoundError() {
+  return makeAppError("Participant not found", "PARTICIPANT_NOT_FOUND", 404);
 }
 
 async function upsertToSupabase(input: ParticipantRecord) {
@@ -108,15 +113,34 @@ export async function createSelection(input: ParticipantRecord) {
 }
 
 export async function changeSelection(input: ParticipantRecord) {
-  return createSelection(input);
+  ensureTeamExists(input.teamCode);
+
+  const current = await getParticipantByDeviceId(input.deviceId);
+  if (!current) {
+    throw makeParticipantNotFoundError();
+  }
+
+  if (current.teamCode === input.teamCode) {
+    if (current.displayName === input.displayName) {
+      return current;
+    }
+
+    return updateDisplayName(input.deviceId, input.displayName);
+  }
+
+  const nextRecord = {
+    ...current,
+    displayName: input.displayName,
+    teamCode: input.teamCode,
+  };
+
+  return createSelection(nextRecord);
 }
 
 export async function updateDisplayName(deviceId: string, displayName: string) {
   const current = await getParticipantByDeviceId(deviceId);
   if (!current) {
-    const error = new Error("Participant not found");
-    (error as Error & { status?: number }).status = 404;
-    throw error;
+    throw makeParticipantNotFoundError();
   }
 
   const updated = { ...current, displayName };
@@ -183,4 +207,8 @@ export function getStandings() {
 
 export function getNews() {
   return news;
+}
+
+export function resetSelectionStoreForTests() {
+  memoryStore.clear();
 }
