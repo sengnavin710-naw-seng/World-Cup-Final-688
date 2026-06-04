@@ -1,7 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  changeSelection,
-  createSelection,
   fetchParticipant,
   resetDevice as resetDeviceRequest,
 } from "../lib/api";
@@ -13,7 +11,9 @@ type SessionState = {
   mode: "selection" | "home";
   participant: ParticipantSession | null;
   brandName: string;
+  sessionError: string;
   handleSelectionSaved: (value: ParticipantSession) => void;
+  retrySession: () => void;
   startTeamChange: () => void;
   resetDevice: () => Promise<void>;
 };
@@ -22,15 +22,18 @@ export function useParticipantSession(): SessionState {
   const [status, setStatus] = useState<"loading" | "ready">("loading");
   const [mode, setMode] = useState<"selection" | "home">("selection");
   const [participant, setParticipant] = useState<ParticipantSession | null>(null);
+  const [sessionError, setSessionError] = useState("");
   const brandName = useMemo(
     () => import.meta.env.VITE_BRAND_NAME ?? "World Cup Festival 688",
     [],
   );
 
-  useEffect(() => {
+  const loadSession = useCallback(() => {
     const deviceId = getOrCreateDeviceId();
+    setStatus("loading");
+    setSessionError("");
 
-    fetchParticipant(deviceId)
+    void fetchParticipant(deviceId)
       .then(({ participant: remoteParticipant }) => {
         if (remoteParticipant) {
           saveSession(remoteParticipant);
@@ -46,6 +49,7 @@ export function useParticipantSession(): SessionState {
           return;
         }
 
+        setParticipant(null);
         setMode("selection");
       })
       .catch(() => {
@@ -54,13 +58,19 @@ export function useParticipantSession(): SessionState {
           setParticipant(local);
           setMode("home");
         } else {
+          setParticipant(null);
           setMode("selection");
+          setSessionError("We could not verify your saved session. You can still pick a team.");
         }
       })
       .finally(() => {
         setStatus("ready");
       });
   }, []);
+
+  useEffect(() => {
+    loadSession();
+  }, [loadSession]);
 
   const handleSelectionSaved = (value: ParticipantSession) => {
     saveSession(value);
@@ -69,6 +79,7 @@ export function useParticipantSession(): SessionState {
   };
 
   const startTeamChange = () => {
+    setSessionError("");
     setMode("selection");
   };
 
@@ -77,6 +88,7 @@ export function useParticipantSession(): SessionState {
     await resetDeviceRequest(deviceId);
     clearDeviceIdentity();
     setParticipant(null);
+    setSessionError("");
     setMode("selection");
   };
 
@@ -85,7 +97,9 @@ export function useParticipantSession(): SessionState {
     mode,
     participant,
     brandName,
+    sessionError,
     handleSelectionSaved,
+    retrySession: loadSession,
     startTeamChange,
     resetDevice,
   };

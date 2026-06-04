@@ -1,5 +1,5 @@
 import { Bell, MoreHorizontal } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchFixtures,
   fetchKnockout,
@@ -16,15 +16,17 @@ import type {
   ParticipantSession,
   Team,
 } from "../../lib/types";
-import { KnockoutTab } from "../home/KnockoutTab";
 import { FixturesTab } from "../home/FixturesTab";
+import { KnockoutTab } from "../home/KnockoutTab";
 import { NewsTab } from "../home/NewsTab";
 import { TableTab } from "../home/TableTab";
-import { BrandHeader } from "../ui/BrandHeader";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { BrandHeader } from "../ui/BrandHeader";
 import { NotificationPanel } from "../ui/NotificationPanel";
 
 const tabs = ["Knockout", "Fixtures", "Table", "News"] as const;
+const tableModes = ["Short", "Full"] as const;
+const scopeModes = ["Overall", "Home", "Away"] as const;
 
 type AppShellProps = {
   brandName: string;
@@ -39,7 +41,11 @@ export function AppShell({
   onResetDevice,
   participant,
 }: AppShellProps) {
+  const swipeStartX = useRef<number | null>(null);
   const [activeTab, setActiveTab] = useState<(typeof tabs)[number]>("Knockout");
+  const [tableMode, setTableMode] = useState<(typeof tableModes)[number]>("Short");
+  const [scopeMode, setScopeMode] = useState<(typeof scopeModes)[number]>("Overall");
+  const [transitionDirection, setTransitionDirection] = useState<"left" | "right">("right");
   const [showMenu, setShowMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showChangeConfirm, setShowChangeConfirm] = useState(false);
@@ -50,20 +56,35 @@ export function AppShell({
   const [standings, setStandings] = useState<GroupStanding[]>([]);
   const [companyPicks, setCompanyPicks] = useState<CompanyPick[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
+  const [homeStatus, setHomeStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [homeError, setHomeError] = useState("");
+  const [resetError, setResetError] = useState("");
+  const [resetting, setResetting] = useState(false);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
-  useEffect(() => {
-    void Promise.all([fetchTeams(), fetchKnockout(), fetchFixtures(), fetchStandings(), fetchNews()]).then(
-      ([teamsData, knockoutData, fixturesData, tableData, newsData]) => {
+  const loadHomeData = useCallback(() => {
+    setHomeStatus("loading");
+    setHomeError("");
+
+    void Promise.all([fetchTeams(), fetchKnockout(), fetchFixtures(), fetchStandings(), fetchNews()])
+      .then(([teamsData, knockoutData, fixturesData, tableData, newsData]) => {
         setTeams(teamsData.teams);
         setKnockout(knockoutData.knockout);
         setFixtures(fixturesData.fixtures);
         setStandings(tableData.standings);
         setCompanyPicks(tableData.companyPicks);
         setNews(newsData.news);
-      },
-    );
+        setHomeStatus("ready");
+      })
+      .catch(() => {
+        setHomeStatus("error");
+        setHomeError("Unable to load the latest tournament dashboard right now.");
+      });
   }, []);
+
+  useEffect(() => {
+    loadHomeData();
+  }, [loadHomeData]);
 
   const selectedTeam = useMemo(
     () => teams.find((team) => team.code === participant.teamCode) ?? null,
@@ -73,7 +94,14 @@ export function AppShell({
   const content = {
     Knockout: <KnockoutTab rounds={knockout} />,
     Fixtures: <FixturesTab fixtures={fixtures} participantTeamCode={participant.teamCode} />,
-    Table: <TableTab companyPicks={companyPicks} standings={standings} />,
+    Table: (
+      <TableTab
+        companyPicks={companyPicks}
+        scopeMode={scopeMode}
+        standings={standings}
+        tableMode={tableMode}
+      />
+    ),
     News: <NewsTab news={news} selectedTeam={selectedTeam} />,
   }[activeTab];
 
@@ -88,84 +116,191 @@ export function AppShell({
     }
   }, [activeTab]);
 
+  const handleTabChange = (nextTab: (typeof tabs)[number]) => {
+    if (nextTab === activeTab) {
+      return;
+    }
+
+    const currentIndex = tabs.indexOf(activeTab);
+    const nextIndex = tabs.indexOf(nextTab);
+    setTransitionDirection(nextIndex > currentIndex ? "right" : "left");
+    setActiveTab(nextTab);
+  };
+
+  const handleSwipeToTab = (direction: "left" | "right") => {
+    const currentIndex = tabs.indexOf(activeTab);
+    const nextIndex =
+      direction === "left"
+        ? Math.min(currentIndex + 1, tabs.length - 1)
+        : Math.max(currentIndex - 1, 0);
+
+    if (nextIndex !== currentIndex) {
+      handleTabChange(tabs[nextIndex]);
+    }
+  };
+
   return (
     <main className="app-shell">
       <div className="container">
-        <header className="topbar">
-          <BrandHeader brandName={brandName} compact showMark={false} />
-          <div className="topbar-actions">
-            <button
-              aria-label="Notifications"
-              className="icon-button"
-              type="button"
-              onClick={() => {
-                setShowMenu(false);
-                setShowNotifications((current) => !current);
-              }}
-            >
-              <Bell size={18} />
-            </button>
-            <button
-              aria-label="More options"
-              className="icon-button"
-              type="button"
-              onClick={() => {
-                setShowNotifications(false);
-                setShowMenu((current) => !current);
-              }}
-            >
-              <MoreHorizontal size={18} />
-            </button>
-            {showNotifications ? <NotificationPanel /> : null}
-            {showMenu ? (
-              <div className="menu-panel">
-                <div className="menu-panel-label">Selected Team</div>
-                <div className="menu-panel-value">
-                  <span aria-hidden="true">{selectedTeam?.flag ?? "🏳️"}</span>
-                  <span>{selectedTeam?.name ?? "Unknown Team"}</span>
+        <section className="home-chrome">
+          <header className="topbar">
+            <BrandHeader brandName={brandName} compact showMark={false} />
+            <div className="topbar-actions">
+              <button
+                aria-label="Notifications"
+                className="icon-button"
+                type="button"
+                onClick={() => {
+                  setShowMenu(false);
+                  setShowNotifications((current) => !current);
+                }}
+              >
+                <Bell size={18} />
+              </button>
+              <button
+                aria-label="More options"
+                className="icon-button"
+                type="button"
+                onClick={() => {
+                  setShowNotifications(false);
+                  setShowMenu((current) => !current);
+                }}
+              >
+                <MoreHorizontal size={18} />
+              </button>
+              {showNotifications ? <NotificationPanel /> : null}
+              {showMenu ? (
+                <div className="menu-panel">
+                  <div className="menu-panel-label">Selected Team</div>
+                  <div className="menu-panel-value">
+                    <span aria-hidden="true">{selectedTeam?.flag ?? "🏳️"}</span>
+                    <span>{selectedTeam?.name ?? "Unknown Team"}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMenu(false);
+                      setShowChangeConfirm(true);
+                    }}
+                  >
+                    Change Team
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMenu(false);
+                      setShowResetConfirm(true);
+                    }}
+                  >
+                    Reset this device
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowMenu(false);
-                    setShowChangeConfirm(true);
-                  }}
-                >
-                  Change Team
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowMenu(false);
-                    setShowResetConfirm(true);
-                  }}
-                >
-                  Reset this device
-                </button>
-              </div>
-            ) : null}
-          </div>
-        </header>
+              ) : null}
+            </div>
+          </header>
 
-        <nav aria-label="Home tabs" className="tabs">
-          {tabs.map((tab, index) => (
-            <button
-              key={tab}
-              ref={(node) => {
-                tabRefs.current[index] = node;
-              }}
-              aria-selected={activeTab === tab}
-              className="tab-button"
-              role="tab"
-              type="button"
-              onClick={() => setActiveTab(tab)}
-            >
-              {tab}
-            </button>
-          ))}
-        </nav>
+          <nav aria-label="Home tabs" className="tabs">
+            {tabs.map((tab, index) => (
+              <button
+                key={tab}
+                ref={(node) => {
+                  tabRefs.current[index] = node;
+                }}
+                aria-selected={activeTab === tab}
+                className="tab-button"
+                role="tab"
+                type="button"
+                onClick={() => handleTabChange(tab)}
+              >
+                {tab}
+              </button>
+            ))}
+          </nav>
+        </section>
 
-        <section className="tab-panel">{content}</section>
+        {homeStatus === "ready" && activeTab === "Table" ? (
+          <section className="table-shell-toolbar">
+            <div className="table-toggle-group" role="tablist" aria-label="Table detail mode">
+              {tableModes.map((mode) => (
+                <button
+                  key={mode}
+                  aria-selected={tableMode === mode}
+                  className={`table-toggle-button${tableMode === mode ? " active" : ""}`}
+                  role="tab"
+                  type="button"
+                  onClick={() => setTableMode(mode)}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+
+            <label className="scope-select-wrap">
+              <span className="sr-only">Scope</span>
+              <select
+                className="scope-select"
+                value={scopeMode}
+                onChange={(event) => setScopeMode(event.target.value as (typeof scopeModes)[number])}
+              >
+                {scopeModes.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {mode}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </section>
+        ) : null}
+
+        {homeStatus === "loading" ? (
+          <section className="tab-panel state-card">
+            <span className="summary-label">Dashboard</span>
+            <strong>Loading the latest tournament dashboard...</strong>
+            <p className="state-copy">We are fetching knockout, fixtures, standings, and news for your current session.</p>
+          </section>
+        ) : null}
+        {homeStatus === "error" ? (
+          <section className="tab-panel state-card">
+            <span className="summary-label">Dashboard</span>
+            <strong>Unable to load the latest dashboard.</strong>
+            <p className="state-copy">{homeError}</p>
+            <div className="inline-actions">
+              <button className="primary-button" type="button" onClick={loadHomeData}>
+                Retry
+              </button>
+            </div>
+          </section>
+        ) : null}
+        {homeStatus === "ready" ? (
+          <section
+            className="tab-panel"
+            onTouchStart={(event) => {
+              swipeStartX.current = event.changedTouches[0]?.clientX ?? null;
+            }}
+            onTouchEnd={(event) => {
+              const startX = swipeStartX.current;
+              const endX = event.changedTouches[0]?.clientX ?? null;
+              swipeStartX.current = null;
+
+              if (startX === null || endX === null) {
+                return;
+              }
+
+              const distance = endX - startX;
+              const threshold = 48;
+
+              if (Math.abs(distance) < threshold) {
+                return;
+              }
+
+              handleSwipeToTab(distance < 0 ? "left" : "right");
+            }}
+          >
+            <div key={activeTab} className={`tab-panel-content slide-from-${transitionDirection}`}>
+              {content}
+            </div>
+          </section>
+        ) : null}
       </div>
 
       <ConfirmDialog
@@ -181,16 +316,31 @@ export function AppShell({
       />
 
       <ConfirmDialog
-        confirmLabel="Reset Device"
+        confirmLabel={resetting ? "Resetting..." : "Reset Device"}
         description="This will clear your remembered session and release your team back to available."
         onCancel={() => setShowResetConfirm(false)}
         onConfirm={() => {
-          setShowResetConfirm(false);
-          void onResetDevice();
+          setResetting(true);
+          setResetError("");
+          void onResetDevice()
+            .then(() => {
+              setShowResetConfirm(false);
+            })
+            .catch(() => {
+              setResetError("Unable to reset this device right now. Please try again.");
+            })
+            .finally(() => {
+              setResetting(false);
+            });
         }}
         open={showResetConfirm}
         title="Reset This Device"
       />
+      {resetError ? (
+        <div className="floating-feedback" role="status">
+          {resetError}
+        </div>
+      ) : null}
     </main>
   );
 }

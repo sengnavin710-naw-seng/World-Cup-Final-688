@@ -23,6 +23,10 @@ export type KnockoutRound = {
     homeScore: number;
     awayScore: number;
     kickoff: string;
+    side?: "left" | "right" | "center";
+    bracketColumn?: number;
+    bracketSlot?: number;
+    badge?: string;
   }>;
 };
 
@@ -39,10 +43,41 @@ export type Fixture = {
 export type GroupStanding = {
   group: string;
   rows: Array<{
+    teamCode: string;
     team: string;
-    played: number;
-    points: number;
-    goalDiff: number;
+    flag: string;
+    stats: {
+      overall: {
+        played: number;
+        wins: number;
+        draws: number;
+        losses: number;
+        goalsFor: number;
+        goalsAgainst: number;
+        goalDiff: number;
+        points: number;
+      };
+      home: {
+        played: number;
+        wins: number;
+        draws: number;
+        losses: number;
+        goalsFor: number;
+        goalsAgainst: number;
+        goalDiff: number;
+        points: number;
+      };
+      away: {
+        played: number;
+        wins: number;
+        draws: number;
+        losses: number;
+        goalsFor: number;
+        goalsAgainst: number;
+        goalDiff: number;
+        points: number;
+      };
+    };
   }>;
 };
 

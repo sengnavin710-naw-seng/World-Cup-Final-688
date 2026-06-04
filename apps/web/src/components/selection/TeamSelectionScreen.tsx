@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { changeSelection, createSelection, fetchTeams } from "../../lib/api";
 import { getOrCreateDeviceId } from "../../lib/deviceIdentity";
 import type { ParticipantSession, Team } from "../../lib/types";
@@ -9,12 +9,14 @@ type TeamSelectionScreenProps = {
   brandName: string;
   mode: "create" | "change";
   currentTeamCode?: string;
+  initialMessage?: string;
   onSelectionSaved: (value: ParticipantSession) => void;
 };
 
 export function TeamSelectionScreen({
   brandName,
   currentTeamCode,
+  initialMessage = "",
   mode,
   onSelectionSaved,
 }: TeamSelectionScreenProps) {
@@ -23,18 +25,32 @@ export function TeamSelectionScreen({
   const [selectedTeamCode, setSelectedTeamCode] = useState<string | null>(currentTeamCode ?? null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState(initialMessage);
+
+  const loadTeams = useCallback(async () => {
+    setLoading(true);
+    setErrorMessage(initialMessage);
+
+    try {
+      const data = await fetchTeams();
+      setTeams(data.teams);
+      return data.teams;
+    } catch {
+      setTeams([]);
+      setErrorMessage("Unable to load teams right now.");
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  }, [initialMessage]);
 
   useEffect(() => {
-    fetchTeams()
-      .then((data) => {
-        setTeams(data.teams);
-      })
-      .catch(() => {
-        setErrorMessage("Unable to load teams right now.");
-      })
-      .finally(() => setLoading(false));
-  }, []);
+    void loadTeams();
+  }, [loadTeams]);
+
+  useEffect(() => {
+    setErrorMessage(initialMessage);
+  }, [initialMessage]);
 
   const filteredTeams = useMemo(() => {
     const normalized = search.trim().toLowerCase();
@@ -68,11 +84,23 @@ export function TeamSelectionScreen({
         mode === "change" ? await changeSelection(payload) : await createSelection(payload);
       onSelectionSaved(response.participant);
     } catch (error) {
-      const message =
-        error instanceof Error && "code" in error && (error as Error & { code?: string }).code === "SELECTION_CONFLICT"
-          ? "This team has already been selected. Please choose another team."
-          : "Unable to save your team selection right now.";
-      setErrorMessage(message);
+      const isConflict =
+        error instanceof Error && "code" in error && (error as Error & { code?: string }).code === "SELECTION_CONFLICT";
+
+      if (isConflict) {
+        const latestTeams = await loadTeams();
+        const selectedTeamStillAvailable = latestTeams.some(
+          (team) => team.code === selectedTeamCode && (!team.isOwned || team.code === currentTeamCode),
+        );
+
+        if (!selectedTeamStillAvailable) {
+          setSelectedTeamCode(null);
+        }
+
+        setErrorMessage("That team was just taken by someone else. Please choose another team.");
+      } else {
+        setErrorMessage("Unable to save your team selection right now.");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -94,8 +122,26 @@ export function TeamSelectionScreen({
           </div>
         </div>
 
-        {loading ? <div className="selection-panel">Loading teams...</div> : null}
-        {!loading ? (
+        {loading ? (
+          <div className="selection-panel state-card">
+            <span className="summary-label">Teams</span>
+            <strong>Loading available teams...</strong>
+            <p className="state-copy">Please wait a moment while we fetch the latest tournament selection board.</p>
+          </div>
+        ) : null}
+        {!loading && !teams.length ? (
+          <div className="selection-panel state-card">
+            <span className="summary-label">Teams</span>
+            <strong>Unable to load teams right now.</strong>
+            <p className="state-copy">The team board did not arrive from the server. Try again and we will reload it for you.</p>
+            <div className="inline-actions">
+              <button className="primary-button" type="button" onClick={loadTeams}>
+                Retry
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {!loading && teams.length ? (
           <TeamGrid
             currentTeamCode={currentTeamCode}
             onSelect={setSelectedTeamCode}
@@ -120,7 +166,11 @@ export function TeamSelectionScreen({
             >
               {submitting ? "Saving..." : "Continue"}
             </button>
-            {errorMessage ? <span className="error-text">{errorMessage}</span> : null}
+            {errorMessage ? (
+              <span className="error-text" role="status">
+                {errorMessage}
+              </span>
+            ) : null}
           </div>
         </div>
       </div>
