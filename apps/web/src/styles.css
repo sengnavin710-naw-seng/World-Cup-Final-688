@@ -677,6 +677,7 @@ button {
 
 .knockout-shell {
   width: 100%;
+  min-width: 0;
 }
 
 .knockout-board-scroll {
@@ -843,6 +844,234 @@ button {
   color: #b7c3cf;
   font-size: 0.78rem;
   letter-spacing: 0.14em;
+}
+
+.knockout-mobile {
+  display: none;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid #2c2c2c;
+  border-radius: 8px;
+  background: #050505;
+  color: #f5f8ff;
+  box-shadow: 0 18px 34px rgba(11, 30, 44, 0.14);
+}
+
+.knockout-round-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 10px 10px 12px;
+  border-bottom: 1px solid #1f1f1f;
+  background: #050505;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.knockout-round-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.knockout-round-chip {
+  display: grid;
+  flex: 0 0 auto;
+  min-width: 86px;
+  gap: 2px;
+  border: 1px solid #313131;
+  border-radius: 999px;
+  background: #343434;
+  color: #f2f5f8;
+  padding: 8px 13px;
+  text-align: center;
+}
+
+.knockout-round-chip[aria-selected="true"] {
+  border-color: #ffffff;
+  background: #ffffff;
+  color: #171717;
+}
+
+.knockout-round-chip strong {
+  color: inherit;
+  font-size: 0.82rem;
+  line-height: 1.1;
+}
+
+.knockout-round-chip span {
+  color: currentColor;
+  font-size: 0.66rem;
+  line-height: 1.1;
+  opacity: 0.72;
+}
+
+.knockout-mobile-bracket-scroll {
+  max-height: min(72vh, 760px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  background:
+    radial-gradient(circle at 82% 10%, rgba(20, 66, 170, 0.22), transparent 20%),
+    #050505;
+  scrollbar-color: #4c4c4c transparent;
+}
+
+.knockout-mobile-bracket-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.knockout-mobile-bracket-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #4c4c4c;
+}
+
+.knockout-mobile-bracket-board {
+  position: relative;
+  width: var(--knockout-mobile-board-width);
+  min-width: var(--knockout-mobile-board-width);
+  height: var(--knockout-mobile-board-height);
+  min-height: var(--knockout-mobile-board-height);
+}
+
+.knockout-mobile-connectors {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.knockout-mobile-connectors path {
+  fill: none;
+  stroke: #2d66d7;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.knockout-mobile-bracket-card {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  width: 300px;
+  min-height: var(--knockout-mobile-card-height);
+  padding: 15px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  background: #202020;
+  box-shadow: 0 14px 22px rgba(0, 0, 0, 0.22);
+}
+
+.knockout-mobile-bracket-final {
+  align-content: center;
+  grid-template-columns: minmax(0, 1fr) 66px;
+  grid-template-rows: auto 1fr;
+  column-gap: 12px;
+}
+
+.knockout-mobile-card-label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: #e9edf2;
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.knockout-mobile-card-label span {
+  width: 4px;
+  height: 14px;
+  border-radius: 999px;
+  background: #6b5cff;
+}
+
+.knockout-mobile-bracket-card[data-badge="BRONZE-FINAL"] .knockout-mobile-card-label span {
+  background: #d28a45;
+}
+
+.knockout-mobile-card-label strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.knockout-mobile-card-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 94px;
+  gap: 12px;
+  align-items: center;
+  margin-top: 13px;
+}
+
+.knockout-mobile-card-teams {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+}
+
+.knockout-mobile-card-team {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.knockout-mobile-card-team strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #f6f8fb;
+  font-size: 0.9rem;
+  line-height: 1.12;
+}
+
+.knockout-mobile-card-body time {
+  display: grid;
+  min-height: 52px;
+  align-items: center;
+  border-left: 1px solid #343434;
+  color: #d9e0e8;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.knockout-mobile-final-mark {
+  position: relative;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: grid;
+  place-items: center;
+  color: #8f8f8f;
+}
+
+.knockout-mobile-final-mark span {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 2px solid #777;
+  border-radius: 999px;
+  background: #202020;
+  color: #c6c6c6;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.knockout-mobile-bracket-final .knockout-mobile-card-body {
+  grid-column: 1;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.knockout-mobile-bracket-final .knockout-mobile-card-body time {
+  min-height: 0;
+  justify-items: start;
+  border-left: none;
+  text-align: left;
 }
 
 .team-line {
@@ -1024,6 +1253,16 @@ button {
 @media (max-width: 900px) {
   .grid-two {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .knockout-board-scroll {
+    display: none;
+  }
+
+  .knockout-mobile {
+    display: block;
   }
 }
 
