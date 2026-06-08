@@ -24,6 +24,16 @@ function parseNonEmptyString(value: unknown, fieldName: string) {
   return value.trim();
 }
 
+function parseDisplayName(value: unknown) {
+  const displayName = parseNonEmptyString(value, "displayName");
+
+  if (displayName.length > 80) {
+    throw invalidRequest("displayName is too long.");
+  }
+
+  return displayName;
+}
+
 function parseParticipantPayload(body: unknown) {
   if (!body || typeof body !== "object") {
     throw invalidRequest("Request body must be an object.");
@@ -31,7 +41,7 @@ function parseParticipantPayload(body: unknown) {
 
   const payload = body as Record<string, unknown>;
   const deviceId = parseNonEmptyString(payload.deviceId, "deviceId");
-  const displayName = parseNonEmptyString(payload.displayName, "displayName");
+  const displayName = parseDisplayName(payload.displayName);
   const teamCode = parseNonEmptyString(payload.teamCode, "teamCode").toUpperCase();
 
   if (!/^[A-Z]{3}$/.test(teamCode)) {
@@ -40,10 +50,6 @@ function parseParticipantPayload(body: unknown) {
 
   if (deviceId.length > 128) {
     throw invalidRequest("deviceId is too long.");
-  }
-
-  if (displayName.length > 80) {
-    throw invalidRequest("displayName is too long.");
   }
 
   return { deviceId, displayName, teamCode };
@@ -88,7 +94,7 @@ participantRouter.post("/change", async (req, res, next) => {
 participantRouter.patch("/display-name", async (req, res, next) => {
   try {
     const deviceId = parseDeviceIdPayload(req.body);
-    const displayName = parseNonEmptyString((req.body as Record<string, unknown>).displayName, "displayName");
+    const displayName = parseDisplayName((req.body as Record<string, unknown>).displayName);
     const participant = await updateDisplayName(deviceId, displayName);
     res.json({ participant });
   } catch (error) {

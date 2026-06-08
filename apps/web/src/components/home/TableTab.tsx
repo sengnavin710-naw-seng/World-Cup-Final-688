@@ -27,66 +27,82 @@ function TeamLogo({ code, flag, name }: { code: string; flag: string; name: stri
   );
 }
 
-export function TableTab({ companyPicks: _companyPicks, scopeMode, standings, tableMode }: TableTabProps) {
+export function TableTab({ companyPicks, scopeMode, standings, tableMode }: TableTabProps) {
   const sortedStandings = useMemo(
     () => [...standings].sort((left, right) => left.group.localeCompare(right.group)),
     [standings],
+  );
+  const displayNamesByTeam = useMemo(
+    () => new Map(companyPicks.map((pick) => [pick.teamCode, pick.displayName])),
+    [companyPicks],
   );
 
   const scopeKey = scopeMode.toLowerCase() as "overall" | "home" | "away";
 
   return (
     <div className="table-tab-layout">
-      <div className="group-cards-grid">
+      <div className={`group-cards-grid${tableMode === "Full" ? " table-mode-full" : ""}`}>
         {sortedStandings.map((group) => (
           <article key={group.group} className="group-card">
-            <div className="group-card-head">
-              <strong>{`Grp. ${group.group}`}</strong>
-              <div className={`group-card-columns ${tableMode === "Full" ? "full" : ""}`} aria-hidden="true">
-                <span>Pl</span>
-                {tableMode === "Full" ? (
-                  <>
-                    <span>W</span>
-                    <span>D</span>
-                    <span>L</span>
-                    <span>GF</span>
-                    <span>GA</span>
-                  </>
-                ) : null}
-                <span>GD</span>
-                <span>Pts</span>
+            <div
+              aria-label={tableMode === "Full" ? `Full standings for Group ${group.group}` : undefined}
+              className="group-table-scroll"
+              tabIndex={tableMode === "Full" ? 0 : undefined}
+            >
+              <div className={`group-table-content${tableMode === "Full" ? " table-mode-full" : ""}`}>
+                <div className="group-card-head">
+                  <strong>{`Grp. ${group.group}`}</strong>
+                  <div className={`group-card-columns ${tableMode === "Full" ? "full" : ""}`} aria-hidden="true">
+                    <span>Pl</span>
+                    {tableMode === "Full" ? (
+                      <>
+                        <span>W</span>
+                        <span>D</span>
+                        <span>L</span>
+                        <span>GF</span>
+                        <span>GA</span>
+                      </>
+                    ) : null}
+                    <span>GD</span>
+                    <span>Pts</span>
+                  </div>
+                </div>
+
+                <table className={`data-table compact-table${tableMode === "Full" ? " table-mode-full" : ""}`}>
+                  <tbody>
+                    {group.rows.map((row, index) => {
+                      const stats = row.stats[scopeKey];
+                      const ownerName = displayNamesByTeam.get(row.teamCode);
+
+                      return (
+                        <tr key={`${group.group}-${row.teamCode}`}>
+                          <td className="team-cell">
+                            <span className="team-rank">{index + 1}</span>
+                            <TeamLogo code={row.teamCode} flag={row.flag} name={row.team} />
+                            <span className="table-team-copy">
+                              <span className="table-team-name">{row.team}</span>
+                              {ownerName ? <small className="team-owner-name">{ownerName}</small> : null}
+                            </span>
+                          </td>
+                          <td>{stats.played}</td>
+                          {tableMode === "Full" ? (
+                            <>
+                              <td>{stats.wins}</td>
+                              <td>{stats.draws}</td>
+                              <td>{stats.losses}</td>
+                              <td>{stats.goalsFor}</td>
+                              <td>{stats.goalsAgainst}</td>
+                            </>
+                          ) : null}
+                          <td>{stats.goalDiff}</td>
+                          <td>{stats.points}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
-
-            <table className="data-table compact-table">
-              <tbody>
-                {group.rows.map((row, index) => {
-                  const stats = row.stats[scopeKey];
-
-                  return (
-                    <tr key={`${group.group}-${row.teamCode}`}>
-                      <td className="team-cell">
-                        <span className="team-rank">{index + 1}</span>
-                        <TeamLogo code={row.teamCode} flag={row.flag} name={row.team} />
-                        <span>{row.team}</span>
-                      </td>
-                      <td>{stats.played}</td>
-                      {tableMode === "Full" ? (
-                        <>
-                          <td>{stats.wins}</td>
-                          <td>{stats.draws}</td>
-                          <td>{stats.losses}</td>
-                          <td>{stats.goalsFor}</td>
-                          <td>{stats.goalsAgainst}</td>
-                        </>
-                      ) : null}
-                      <td>{stats.goalDiff}</td>
-                      <td>{stats.points}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
           </article>
         ))}
       </div>

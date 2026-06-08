@@ -16,7 +16,11 @@ import type {
   ParticipantSession,
   Team,
 } from "../../lib/types";
-import { FixturesTab } from "../home/FixturesTab";
+import {
+  FixtureFilters,
+  FixturesTab,
+  type FixtureFilter,
+} from "../home/FixturesTab";
 import { KnockoutTab } from "../home/KnockoutTab";
 import { NewsTab } from "../home/NewsTab";
 import { TableTab } from "../home/TableTab";
@@ -43,6 +47,8 @@ export function AppShell({
 }: AppShellProps) {
   const swipeStartX = useRef<number | null>(null);
   const [activeTab, setActiveTab] = useState<(typeof tabs)[number]>("Knockout");
+  const [fixtureFilter, setFixtureFilter] = useState<FixtureFilter>("Date");
+  const [fixtureGroupOverride, setFixtureGroupOverride] = useState("");
   const [tableMode, setTableMode] = useState<(typeof tableModes)[number]>("Short");
   const [scopeMode, setScopeMode] = useState<(typeof scopeModes)[number]>("Overall");
   const [transitionDirection, setTransitionDirection] = useState<"left" | "right">("right");
@@ -66,9 +72,16 @@ export function AppShell({
     setHomeStatus("loading");
     setHomeError("");
 
-    void Promise.all([fetchTeams(), fetchKnockout(), fetchFixtures(), fetchStandings(), fetchNews()])
-      .then(([teamsData, knockoutData, fixturesData, tableData, newsData]) => {
+    void fetchTeams()
+      .then((teamsData) => {
         setTeams(teamsData.teams);
+      })
+      .catch(() => {
+        setTeams([]);
+      });
+
+    void Promise.all([fetchKnockout(), fetchFixtures(), fetchStandings(), fetchNews()])
+      .then(([knockoutData, fixturesData, tableData, newsData]) => {
         setKnockout(knockoutData.knockout);
         setFixtures(fixturesData.fixtures);
         setStandings(tableData.standings);
@@ -90,10 +103,31 @@ export function AppShell({
     () => teams.find((team) => team.code === participant.teamCode) ?? null,
     [participant.teamCode, teams],
   );
+  const participantFixtureGroup = useMemo(
+    () =>
+      fixtures.find(
+        (fixture) =>
+          fixture.homeTeam === participant.teamCode ||
+          fixture.awayTeam === participant.teamCode,
+      )?.group ??
+      fixtures[0]?.group ??
+      "A",
+    [fixtures, participant.teamCode],
+  );
+  const selectedFixtureGroup = fixtureGroupOverride || participantFixtureGroup;
 
   const content = {
-    Knockout: <KnockoutTab rounds={knockout} />,
-    Fixtures: <FixturesTab fixtures={fixtures} participantTeamCode={participant.teamCode} />,
+    Knockout: <KnockoutTab rounds={knockout} teams={teams} />,
+    Fixtures: (
+      <FixturesTab
+        activeFilter={fixtureFilter}
+        companyPicks={companyPicks}
+        fixtures={fixtures}
+        participantTeamCode={participant.teamCode}
+        selectedGroup={selectedFixtureGroup}
+        showFilters={false}
+      />
+    ),
     Table: (
       <TableTab
         companyPicks={companyPicks}
@@ -218,6 +252,17 @@ export function AppShell({
           </nav>
         </section>
 
+        {homeStatus === "ready" && activeTab === "Fixtures" ? (
+          <section className="fixture-shell-toolbar">
+            <FixtureFilters
+              activeFilter={fixtureFilter}
+              onFilterChange={setFixtureFilter}
+              onGroupChange={setFixtureGroupOverride}
+              selectedGroup={selectedFixtureGroup}
+            />
+          </section>
+        ) : null}
+
         {homeStatus === "ready" && activeTab === "Table" ? (
           <section className="table-shell-toolbar">
             <div className="table-toggle-group" role="tablist" aria-label="Table detail mode">
@@ -273,7 +318,11 @@ export function AppShell({
         ) : null}
         {homeStatus === "ready" ? (
           <section
-            className="tab-panel"
+            className={[
+              "tab-panel",
+              activeTab === "Knockout" ? "tab-panel-knockout" : "",
+              activeTab === "Fixtures" ? "tab-panel-fixtures" : "",
+            ].filter(Boolean).join(" ")}
             onTouchStart={(event) => {
               swipeStartX.current = event.changedTouches[0]?.clientX ?? null;
             }}

@@ -1,7 +1,7 @@
 import { Trophy } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import type { KnockoutRound } from "../../lib/types";
+import type { KnockoutRound, Team } from "../../lib/types";
 
 type KnockoutMatch = KnockoutRound["matches"][number];
 type BracketSide = "left" | "right";
@@ -10,6 +10,10 @@ type MobilePositionedMatch = BracketMatch & {
   height: number;
   x: number;
   y: number;
+};
+type ResolvedKnockoutTeam = {
+  label: string;
+  ownerName?: string;
 };
 
 const board = {
@@ -129,6 +133,33 @@ function getMobileMatchLabel(match: BracketMatch) {
   }
 
   return match.round;
+}
+
+function resolveKnockoutTeam(value: string, teams: Team[]): ResolvedKnockoutTeam {
+  const normalizedValue = value.trim().toLowerCase();
+  const team = teams.find(
+    (candidate) =>
+      candidate.code.toLowerCase() === normalizedValue ||
+      candidate.name.toLowerCase() === normalizedValue,
+  );
+
+  return {
+    label: team?.name ?? value,
+    ownerName: team?.ownedByName,
+  };
+}
+
+function KnockoutTeamName({ teams, value }: { teams: Team[]; value: string }) {
+  const resolved = resolveKnockoutTeam(value, teams);
+
+  return (
+    <span className="knockout-team-name">
+      <span className="knockout-team-label">{resolved.label}</span>
+      {resolved.ownerName ? (
+        <small className="knockout-owner-name">{resolved.ownerName}</small>
+      ) : null}
+    </span>
+  );
 }
 
 function getMobileRoundCenters(rounds: KnockoutRound[]) {
@@ -326,7 +357,7 @@ function getConnectorPaths() {
   return paths;
 }
 
-function MatchCard({ match }: { match: BracketMatch }) {
+function MatchCard({ match, teams }: { match: BracketMatch; teams: Team[] }) {
   const position = getMatchPosition(match);
   const style = {
     left: position.x,
@@ -345,8 +376,8 @@ function MatchCard({ match }: { match: BracketMatch }) {
         <span className="knockout-crest" />
       </div>
       <div className="knockout-card-teams">
-        <strong>{match.homeTeam}</strong>
-        <strong>{match.awayTeam}</strong>
+        <KnockoutTeamName teams={teams} value={match.homeTeam} />
+        <KnockoutTeamName teams={teams} value={match.awayTeam} />
       </div>
       <div className="knockout-card-date">{match.kickoff}</div>
       {match.badge ? <span className="knockout-card-badge">{match.badge}</span> : null}
@@ -354,7 +385,13 @@ function MatchCard({ match }: { match: BracketMatch }) {
   );
 }
 
-function MobileBracketMatchCard({ match }: { match: MobilePositionedMatch }) {
+function MobileBracketMatchCard({
+  match,
+  teams,
+}: {
+  match: MobilePositionedMatch;
+  teams: Team[];
+}) {
   const style = {
     "--knockout-mobile-card-height": `${match.height}px`,
     left: match.x,
@@ -384,11 +421,11 @@ function MobileBracketMatchCard({ match }: { match: MobilePositionedMatch }) {
         <div className="knockout-mobile-card-teams">
           <div className="knockout-mobile-card-team">
             <span className="knockout-crest" aria-hidden="true" />
-            <strong>{match.homeTeam}</strong>
+            <KnockoutTeamName teams={teams} value={match.homeTeam} />
           </div>
           <div className="knockout-mobile-card-team">
             <span className="knockout-crest" aria-hidden="true" />
-            <strong>{match.awayTeam}</strong>
+            <KnockoutTeamName teams={teams} value={match.awayTeam} />
           </div>
         </div>
         <time>{match.kickoff}</time>
@@ -397,7 +434,13 @@ function MobileBracketMatchCard({ match }: { match: MobilePositionedMatch }) {
   );
 }
 
-export function KnockoutTab({ rounds }: { rounds: KnockoutRound[] }) {
+export function KnockoutTab({
+  rounds,
+  teams,
+}: {
+  rounds: KnockoutRound[];
+  teams: Team[];
+}) {
   const [activeMobileRound, setActiveMobileRound] = useState("");
   const mobileBoardScrollRef = useRef<HTMLDivElement | null>(null);
   const mobileRoundButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -475,7 +518,7 @@ export function KnockoutTab({ rounds }: { rounds: KnockoutRound[] }) {
           </div>
 
           {matches.map((match) => (
-            <MatchCard key={match.id} match={match} />
+            <MatchCard key={match.id} match={match} teams={teams} />
           ))}
         </section>
       </div>
@@ -528,7 +571,7 @@ export function KnockoutTab({ rounds }: { rounds: KnockoutRound[] }) {
             </svg>
 
             {mobileLayout.matches.map((match) => (
-              <MobileBracketMatchCard key={`mobile-${match.id}`} match={match} />
+              <MobileBracketMatchCard key={`mobile-${match.id}`} match={match} teams={teams} />
             ))}
           </div>
         </div>

@@ -3,11 +3,13 @@ import { changeSelection, createSelection, fetchTeams } from "../../lib/api";
 import { getOrCreateDeviceId } from "../../lib/deviceIdentity";
 import type { ParticipantSession, Team } from "../../lib/types";
 import { BrandHeader } from "../ui/BrandHeader";
+import { DisplayNameDialog } from "./DisplayNameDialog";
 import { TeamGrid } from "./TeamGrid";
 
 type TeamSelectionScreenProps = {
   brandName: string;
   mode: "create" | "change";
+  currentDisplayName?: string;
   currentTeamCode?: string;
   initialMessage?: string;
   onSelectionSaved: (value: ParticipantSession) => void;
@@ -15,6 +17,7 @@ type TeamSelectionScreenProps = {
 
 export function TeamSelectionScreen({
   brandName,
+  currentDisplayName = "",
   currentTeamCode,
   initialMessage = "",
   mode,
@@ -26,6 +29,7 @@ export function TeamSelectionScreen({
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState(initialMessage);
+  const [showDisplayNameDialog, setShowDisplayNameDialog] = useState(false);
 
   const loadTeams = useCallback(async () => {
     setLoading(true);
@@ -66,28 +70,29 @@ export function TeamSelectionScreen({
     [selectedTeamCode, teams],
   );
 
-  const handleSubmit = async () => {
+  const handleDisplayNameConfirm = async (displayName: string) => {
     if (!selectedTeamCode) return;
 
     setSubmitting(true);
     setErrorMessage("");
-    const deviceId = getOrCreateDeviceId();
 
     const payload = {
-      deviceId,
-      displayName: `Participant ${deviceId.slice(0, 4).toUpperCase()}`,
+      deviceId: getOrCreateDeviceId(),
+      displayName,
       teamCode: selectedTeamCode,
     };
 
     try {
       const response =
         mode === "change" ? await changeSelection(payload) : await createSelection(payload);
+      setShowDisplayNameDialog(false);
       onSelectionSaved(response.participant);
     } catch (error) {
       const isConflict =
         error instanceof Error && "code" in error && (error as Error & { code?: string }).code === "SELECTION_CONFLICT";
 
       if (isConflict) {
+        setShowDisplayNameDialog(false);
         const latestTeams = await loadTeams();
         const selectedTeamStillAvailable = latestTeams.some(
           (team) => team.code === selectedTeamCode && (!team.isOwned || team.code === currentTeamCode),
@@ -162,11 +167,14 @@ export function TeamSelectionScreen({
               className="primary-button"
               disabled={!selectedTeamCode || submitting}
               type="button"
-              onClick={handleSubmit}
+              onClick={() => {
+                setErrorMessage("");
+                setShowDisplayNameDialog(true);
+              }}
             >
               {submitting ? "Saving..." : "Continue"}
             </button>
-            {errorMessage ? (
+            {errorMessage && !showDisplayNameDialog ? (
               <span className="error-text" role="status">
                 {errorMessage}
               </span>
@@ -174,6 +182,14 @@ export function TeamSelectionScreen({
           </div>
         </div>
       </div>
+      <DisplayNameDialog
+        initialValue={mode === "change" ? currentDisplayName : ""}
+        open={showDisplayNameDialog}
+        submitError={errorMessage}
+        submitting={submitting}
+        onCancel={() => setShowDisplayNameDialog(false)}
+        onConfirm={handleDisplayNameConfirm}
+      />
     </main>
   );
 }

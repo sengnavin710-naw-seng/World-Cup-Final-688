@@ -30,17 +30,24 @@ export type KnockoutRound = {
     bracketColumn?: number;
     bracketSlot?: number;
     badge?: string;
+    matchNumber: number;
+    venue: string;
   }>;
 };
 
 export type Fixture = {
   id: string;
+  matchNumber: number;
+  group: string;
   round: string;
   homeTeam: string;
+  homeTeamName: string;
   awayTeam: string;
+  awayTeamName: string;
   homeFlag: string;
   awayFlag: string;
   kickoff: string;
+  venue: string;
 };
 
 export type GroupStanding = {

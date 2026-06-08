@@ -31,6 +31,13 @@ test("requires a display name before confirming", () => {
   expect(onConfirm).not.toHaveBeenCalled();
 });
 
+test("does not render a visible display name field label", () => {
+  const { container } = render(<DisplayNameDialog {...defaultProps} />);
+
+  expect(container.querySelector(".display-name-field > span")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Display name")).toBeInTheDocument();
+});
+
 test("trims and submits a Burmese display name", () => {
   const onConfirm = vi.fn();
 
@@ -86,6 +93,63 @@ test("prefills and focuses the input, resets on reopen, and supports cancel", ()
   expect(onCancel).toHaveBeenCalledOnce();
 });
 
+test("traps focus within the dialog", () => {
+  render(<DisplayNameDialog {...defaultProps} />);
+
+  const input = screen.getByLabelText("Display name");
+  const cancelButton = screen.getByRole("button", { name: "Cancel" });
+  const saveButton = screen.getByRole("button", { name: "Save" });
+
+  expect(input).toHaveFocus();
+
+  fireEvent.keyDown(input, { key: "Tab" });
+  expect(cancelButton).toHaveFocus();
+
+  fireEvent.keyDown(cancelButton, { key: "Tab" });
+  expect(saveButton).toHaveFocus();
+
+  fireEvent.keyDown(saveButton, { key: "Tab" });
+  expect(input).toHaveFocus();
+
+  fireEvent.keyDown(input, { key: "Tab", shiftKey: true });
+  expect(saveButton).toHaveFocus();
+});
+
+test("cancels with Escape unless submitting", () => {
+  const onCancel = vi.fn();
+  const { rerender } = render(
+    <DisplayNameDialog {...defaultProps} onCancel={onCancel} />,
+  );
+
+  fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+  expect(onCancel).toHaveBeenCalledOnce();
+
+  rerender(
+    <DisplayNameDialog {...defaultProps} submitting onCancel={onCancel} />,
+  );
+  fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+  expect(onCancel).toHaveBeenCalledOnce();
+});
+
+test("restores focus when the dialog closes or unmounts", () => {
+  const trigger = document.createElement("button");
+  document.body.append(trigger);
+  trigger.focus();
+
+  const { rerender, unmount } = render(<DisplayNameDialog {...defaultProps} />);
+  expect(screen.getByLabelText("Display name")).toHaveFocus();
+
+  rerender(<DisplayNameDialog {...defaultProps} open={false} />);
+  expect(trigger).toHaveFocus();
+
+  rerender(<DisplayNameDialog {...defaultProps} />);
+  expect(screen.getByLabelText("Display name")).toHaveFocus();
+
+  unmount();
+  expect(trigger).toHaveFocus();
+  trigger.remove();
+});
+
 test("rejects a display name longer than 80 characters after trimming", () => {
   const onConfirm = vi.fn();
 
@@ -102,28 +166,38 @@ test("rejects a display name longer than 80 characters after trimming", () => {
   expect(onConfirm).not.toHaveBeenCalled();
 });
 
-test("submits with Enter and gives local validation priority over submit errors", () => {
-  const onConfirm = vi.fn();
-
+test("gives local validation priority over submit errors and describes the error", () => {
   render(
     <DisplayNameDialog
       {...defaultProps}
       submitError="Unable to save your team selection right now."
-      onConfirm={onConfirm}
     />,
   );
 
-  expect(screen.getByRole("status")).toHaveTextContent(
+  const input = screen.getByLabelText("Display name");
+  const submitError = screen.getByRole("status");
+  expect(submitError).toHaveTextContent(
     "Unable to save your team selection right now.",
   );
+  expect(input).toHaveAttribute("aria-invalid", "true");
+  expect(input).toHaveAttribute("aria-describedby", submitError.id);
 
-  fireEvent.submit(screen.getByRole("form", { name: "Display name form" }));
-  expect(screen.getByRole("status")).toHaveTextContent("Display name is required.");
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-  fireEvent.change(screen.getByLabelText("Display name"), {
-    target: { value: "Seng" },
-  });
-  fireEvent.submit(screen.getByRole("form", { name: "Display name form" }));
+  const validationError = screen.getByRole("status");
+  expect(validationError).toHaveTextContent("Display name is required.");
+  expect(input).toHaveAttribute("aria-invalid", "true");
+  expect(input).toHaveAttribute("aria-describedby", validationError.id);
+});
+
+test("submits with the Enter key", () => {
+  const onConfirm = vi.fn();
+
+  render(<DisplayNameDialog {...defaultProps} onConfirm={onConfirm} />);
+
+  const input = screen.getByLabelText("Display name");
+  fireEvent.change(input, { target: { value: "Seng" } });
+  fireEvent.keyDown(input, { key: "Enter", code: "Enter" });
 
   expect(onConfirm).toHaveBeenCalledWith("Seng");
 });

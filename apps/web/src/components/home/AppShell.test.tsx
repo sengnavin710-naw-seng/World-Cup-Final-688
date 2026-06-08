@@ -1,5 +1,6 @@
 import "@testing-library/jest-dom/vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import App from "../../App";
 
 beforeEach(() => {
@@ -86,5 +87,79 @@ test("home defaults to knockout tab for returning participant", async () => {
       "aria-selected",
       "true",
     ),
+  );
+});
+
+test("opens home from the saved local session while remote verification is pending", () => {
+  global.fetch = vi.fn(() => new Promise<Response>(() => {})) as typeof fetch;
+
+  render(<App />);
+
+  expect(screen.getByRole("tab", { name: "Knockout" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+});
+
+test("does not block the knockout dashboard while team availability is pending", async () => {
+  const currentFetch = global.fetch;
+  global.fetch = vi.fn((input, init) => {
+    if (String(input).includes("/api/tournament/teams")) {
+      return new Promise<Response>(() => {});
+    }
+
+    return currentFetch(input, init);
+  }) as typeof fetch;
+
+  render(<App />);
+
+  expect(await screen.findByLabelText("World Cup knockout bracket")).toBeInTheDocument();
+});
+
+test("renders the knockout panel without the default tab padding", async () => {
+  render(<App />);
+
+  const knockoutBracket = await screen.findByLabelText("World Cup knockout bracket");
+
+  expect(knockoutBracket.closest(".tab-panel")).toHaveClass("tab-panel-knockout");
+});
+
+test("renders fixture filters in a toolbar above the fixtures panel", async () => {
+  render(<App />);
+
+  fireEvent.click(screen.getByRole("tab", { name: "Fixtures" }));
+
+  const fixtureFilters = await screen.findByLabelText("Fixture filters");
+  const fixtureList = document.querySelector(".fixture-list");
+
+  expect(fixtureFilters.closest(".fixture-shell-toolbar")).toBeInTheDocument();
+  expect(fixtureFilters.closest(".tab-panel")).not.toBeInTheDocument();
+  expect(fixtureFilters).toHaveClass("fixture-filter-row-fill");
+  expect(fixtureFilters.querySelectorAll("button")).toHaveLength(4);
+  expect(fixtureList?.closest(".tab-panel")).toHaveClass("tab-panel-fixtures");
+});
+
+test("uses the multilingual application font stack", () => {
+  const applicationStyles = readFileSync("src/styles.css", "utf8");
+
+  expect(applicationStyles).toContain(
+    'font-family: "Inter", "Noto Sans Thai", "Noto Sans Myanmar", system-ui, sans-serif;',
+  );
+});
+
+test("uses compact mobile spacing around fixture date headings", () => {
+  const applicationStyles = readFileSync("src/styles.css", "utf8");
+
+  expect(applicationStyles).toMatch(
+    /\.tab-panel-fixtures\s*\{[\s\S]*?padding-top:\s*6px;/,
+  );
+  expect(applicationStyles).toMatch(
+    /\.fixture-section-card\s*\{[\s\S]*?padding:\s*4px 14px 16px;/,
+  );
+  expect(applicationStyles).toMatch(
+    /\.fixture-match-row\s*\{[\s\S]*?padding-block:\s*10px;/,
+  );
+  expect(applicationStyles).toMatch(
+    /\.fixture-section-card \+ \.fixture-section-card\s*\{[\s\S]*?padding-top:\s*10px;/,
   );
 });

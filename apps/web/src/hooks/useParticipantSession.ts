@@ -19,9 +19,21 @@ type SessionState = {
 };
 
 export function useParticipantSession(): SessionState {
-  const [status, setStatus] = useState<"loading" | "ready">("loading");
-  const [mode, setMode] = useState<"selection" | "home">("selection");
-  const [participant, setParticipant] = useState<ParticipantSession | null>(null);
+  const [initialParticipant] = useState(() => {
+    const deviceId = getOrCreateDeviceId();
+    const localParticipant = readSession();
+
+    return localParticipant?.deviceId === deviceId ? localParticipant : null;
+  });
+  const [status, setStatus] = useState<"loading" | "ready">(
+    initialParticipant ? "ready" : "loading",
+  );
+  const [mode, setMode] = useState<"selection" | "home">(
+    initialParticipant ? "home" : "selection",
+  );
+  const [participant, setParticipant] = useState<ParticipantSession | null>(
+    initialParticipant,
+  );
   const [sessionError, setSessionError] = useState("");
   const brandName = useMemo(
     () => import.meta.env.VITE_BRAND_NAME ?? "World Cup Festival 688",
@@ -30,7 +42,16 @@ export function useParticipantSession(): SessionState {
 
   const loadSession = useCallback(() => {
     const deviceId = getOrCreateDeviceId();
-    setStatus("loading");
+    const localParticipant = readSession();
+    const hasLocalParticipant = localParticipant?.deviceId === deviceId;
+
+    if (hasLocalParticipant) {
+      setParticipant(localParticipant);
+      setMode("home");
+      setStatus("ready");
+    } else {
+      setStatus("loading");
+    }
     setSessionError("");
 
     void fetchParticipant(deviceId)
@@ -42,9 +63,8 @@ export function useParticipantSession(): SessionState {
           return;
         }
 
-        const local = readSession();
-        if (local && local.deviceId === deviceId) {
-          setParticipant(local);
+        if (hasLocalParticipant) {
+          setParticipant(localParticipant);
           setMode("home");
           return;
         }
@@ -53,9 +73,8 @@ export function useParticipantSession(): SessionState {
         setMode("selection");
       })
       .catch(() => {
-        const local = readSession();
-        if (local && local.deviceId === deviceId) {
-          setParticipant(local);
+        if (hasLocalParticipant) {
+          setParticipant(localParticipant);
           setMode("home");
         } else {
           setParticipant(null);

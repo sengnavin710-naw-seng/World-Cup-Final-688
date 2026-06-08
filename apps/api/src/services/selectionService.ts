@@ -1,5 +1,5 @@
 import { getSupabaseClient } from "../lib/supabase";
-import { fixtures, knockout, news, standings, teams } from "../data/mockTournamentData";
+import { fixtures, knockout, news, standings, teams } from "../data/tournamentData";
 import type { ParticipantRecord, TeamView } from "../types";
 
 const memoryStore = new Map<string, ParticipantRecord>();

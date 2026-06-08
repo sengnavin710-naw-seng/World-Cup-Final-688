@@ -2,6 +2,8 @@ import request from "supertest";
 import { createServer } from "../server";
 import { resetSelectionStoreForTests } from "../services/selectionService";
 
+const BURMESE_NAME = "\u1019\u1004\u103a\u1038";
+
 beforeEach(() => {
   resetSelectionStoreForTests();
 });
@@ -78,4 +80,42 @@ test("failed change keeps the original team owned by the participant", async () 
   expect(failedChange.status).toBe(409);
   expect(participantSession.body.participant.teamCode).toBe("ARG");
   expect(teams.body.teams.find((team: { code: string }) => team.code === "ARG")?.isOwned).toBe(true);
+});
+
+test("allows duplicate Burmese display names for different teams", async () => {
+  const app = createServer();
+
+  const first = await request(app).post("/api/participant/select").send({
+    deviceId: "device-1",
+    displayName: `  ${BURMESE_NAME}  `,
+    teamCode: "ARG",
+  });
+  const second = await request(app).post("/api/participant/select").send({
+    deviceId: "device-2",
+    displayName: BURMESE_NAME,
+    teamCode: "BRA",
+  });
+
+  expect(first.status).toBe(201);
+  expect(first.body.participant.displayName).toBe(BURMESE_NAME);
+  expect(second.status).toBe(201);
+  expect(second.body.participant.displayName).toBe(BURMESE_NAME);
+});
+
+test("rejects display name updates longer than 80 characters after trimming", async () => {
+  const app = createServer();
+
+  await request(app).post("/api/participant/select").send({
+    deviceId: "device-1",
+    displayName: "Seng",
+    teamCode: "ARG",
+  });
+
+  const response = await request(app).patch("/api/participant/display-name").send({
+    deviceId: "device-1",
+    displayName: ` ${"a".repeat(81)} `,
+  });
+
+  expect(response.status).toBe(400);
+  expect(response.body.code).toBe("INVALID_REQUEST");
 });

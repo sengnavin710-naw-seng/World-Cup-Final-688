@@ -21,6 +21,7 @@ export default function App() {
     return (
       <TeamSelectionScreen
         brandName={session.brandName}
+        currentDisplayName={session.participant?.displayName}
         currentTeamCode={session.participant?.teamCode}
         initialMessage={session.sessionError}
         mode={session.participant ? "change" : "create"}
