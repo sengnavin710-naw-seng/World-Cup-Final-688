@@ -1,12 +1,5 @@
 import { Bell, MoreHorizontal } from "lucide-react";
-import {
-  type TouchEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchFixtures,
   fetchKnockout,
@@ -39,10 +32,6 @@ const tabs = ["Knockout", "Fixtures", "Table", "News"] as const;
 const tableModes = ["Short", "Full"] as const;
 const scopeModes = ["Overall", "Home", "Away"] as const;
 
-type TabName = (typeof tabs)[number];
-type TransitionDirection = "forward" | "backward";
-type TabScreenLayer = "active" | "incoming" | "outgoing";
-
 type AppShellProps = {
   brandName: string;
   participant: ParticipantSession;
@@ -56,19 +45,13 @@ export function AppShell({
   onResetDevice,
   participant,
 }: AppShellProps) {
-  const swipeStart = useRef<{ x: number; y: number } | null>(null);
-  const transitionTimerRef = useRef<number | null>(null);
-  const [activeTab, setActiveTab] = useState<TabName>("Knockout");
-  const [outgoingTab, setOutgoingTab] = useState<TabName | null>(null);
+  const swipeStartX = useRef<number | null>(null);
+  const [activeTab, setActiveTab] = useState<(typeof tabs)[number]>("Knockout");
   const [fixtureFilter, setFixtureFilter] = useState<FixtureFilter>("Date");
   const [fixtureGroupOverride, setFixtureGroupOverride] = useState("");
   const [tableMode, setTableMode] = useState<(typeof tableModes)[number]>("Short");
   const [scopeMode, setScopeMode] = useState<(typeof scopeModes)[number]>("Overall");
-  const [transitionDirection, setTransitionDirection] =
-    useState<TransitionDirection>("forward");
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(
-    () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
-  );
+  const [transitionDirection, setTransitionDirection] = useState<"left" | "right">("right");
   const [showMenu, setShowMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showChangeConfirm, setShowChangeConfirm] = useState(false);
@@ -116,27 +99,6 @@ export function AppShell({
     loadHomeData();
   }, [loadHomeData]);
 
-  useEffect(() => {
-    if (typeof window.matchMedia !== "function") {
-      return undefined;
-    }
-
-    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const updatePreference = () => setPrefersReducedMotion(query.matches);
-
-    query.addEventListener("change", updatePreference);
-    return () => query.removeEventListener("change", updatePreference);
-  }, []);
-
-  useEffect(
-    () => () => {
-      if (transitionTimerRef.current !== null) {
-        window.clearTimeout(transitionTimerRef.current);
-      }
-    },
-    [],
-  );
-
   const selectedTeam = useMemo(
     () => teams.find((team) => team.code === participant.teamCode) ?? null,
     [participant.teamCode, teams],
@@ -154,6 +116,29 @@ export function AppShell({
   );
   const selectedFixtureGroup = fixtureGroupOverride || participantFixtureGroup;
 
+  const content = {
+    Knockout: <KnockoutTab rounds={knockout} teams={teams} />,
+    Fixtures: (
+      <FixturesTab
+        activeFilter={fixtureFilter}
+        companyPicks={companyPicks}
+        fixtures={fixtures}
+        participantTeamCode={participant.teamCode}
+        selectedGroup={selectedFixtureGroup}
+        showFilters={false}
+      />
+    ),
+    Table: (
+      <TableTab
+        companyPicks={companyPicks}
+        scopeMode={scopeMode}
+        standings={standings}
+        tableMode={tableMode}
+      />
+    ),
+    News: <NewsTab news={news} selectedTeam={selectedTeam} />,
+  }[activeTab];
+
   useEffect(() => {
     const activeButton = tabRefs.current[tabs.indexOf(activeTab)];
     if (activeButton && typeof activeButton.scrollIntoView === "function") {
@@ -165,31 +150,15 @@ export function AppShell({
     }
   }, [activeTab]);
 
-  const completeTabTransition = useCallback(() => {
-    setOutgoingTab(null);
-    if (transitionTimerRef.current !== null) {
-      window.clearTimeout(transitionTimerRef.current);
-      transitionTimerRef.current = null;
-    }
-  }, []);
-
-  const handleTabChange = (nextTab: TabName) => {
-    if (nextTab === activeTab || outgoingTab !== null) {
+  const handleTabChange = (nextTab: (typeof tabs)[number]) => {
+    if (nextTab === activeTab) {
       return;
     }
 
     const currentIndex = tabs.indexOf(activeTab);
     const nextIndex = tabs.indexOf(nextTab);
-    setTransitionDirection(nextIndex > currentIndex ? "forward" : "backward");
-
-    if (prefersReducedMotion) {
-      setActiveTab(nextTab);
-      return;
-    }
-
-    setOutgoingTab(activeTab);
+    setTransitionDirection(nextIndex > currentIndex ? "right" : "left");
     setActiveTab(nextTab);
-    transitionTimerRef.current = window.setTimeout(completeTabTransition, 360);
   };
 
   const handleSwipeToTab = (direction: "left" | "right") => {
@@ -202,183 +171,6 @@ export function AppShell({
     if (nextIndex !== currentIndex) {
       handleTabChange(tabs[nextIndex]);
     }
-  };
-
-  const handleTabTouchStart = (event: TouchEvent<HTMLElement>) => {
-    const touch = event.changedTouches[0];
-    swipeStart.current = touch
-      ? { x: touch.clientX, y: touch.clientY }
-      : null;
-  };
-
-  const handleTabTouchEnd = (event: TouchEvent<HTMLElement>) => {
-    const start = swipeStart.current;
-    const touch = event.changedTouches[0];
-    swipeStart.current = null;
-
-    if (!start || !touch) {
-      return;
-    }
-
-    const horizontalDistance = touch.clientX - start.x;
-    const verticalDistance = touch.clientY - start.y;
-    const threshold = 48;
-
-    if (
-      Math.abs(horizontalDistance) < threshold ||
-      Math.abs(horizontalDistance) <= Math.abs(verticalDistance)
-    ) {
-      return;
-    }
-
-    handleSwipeToTab(horizontalDistance < 0 ? "left" : "right");
-  };
-
-  const renderTabContent = (tab: TabName) => {
-    if (tab === "Knockout") {
-      return <KnockoutTab rounds={knockout} teams={teams} />;
-    }
-
-    if (tab === "Fixtures") {
-      return (
-        <FixturesTab
-          activeFilter={fixtureFilter}
-          companyPicks={companyPicks}
-          fixtures={fixtures}
-          participantTeamCode={participant.teamCode}
-          selectedGroup={selectedFixtureGroup}
-          showFilters={false}
-        />
-      );
-    }
-
-    if (tab === "Table") {
-      return (
-        <TableTab
-          companyPicks={companyPicks}
-          scopeMode={scopeMode}
-          standings={standings}
-          tableMode={tableMode}
-        />
-      );
-    }
-
-    return <NewsTab news={news} selectedTeam={selectedTeam} />;
-  };
-
-  const renderTabToolbar = (tab: TabName) => {
-    if (tab === "Fixtures") {
-      return (
-        <section className="fixture-shell-toolbar">
-          <FixtureFilters
-            activeFilter={fixtureFilter}
-            onFilterChange={setFixtureFilter}
-            onGroupChange={setFixtureGroupOverride}
-            selectedGroup={selectedFixtureGroup}
-          />
-        </section>
-      );
-    }
-
-    if (tab === "Table") {
-      return (
-        <section className="table-shell-toolbar">
-          <div className="table-toggle-group" role="tablist" aria-label="Table detail mode">
-            {tableModes.map((mode) => (
-              <button
-                key={mode}
-                aria-selected={tableMode === mode}
-                className={`table-toggle-button${tableMode === mode ? " active" : ""}`}
-                role="tab"
-                type="button"
-                onClick={() => setTableMode(mode)}
-              >
-                {mode}
-              </button>
-            ))}
-          </div>
-
-          <label className="scope-select-wrap">
-            <span className="sr-only">Scope</span>
-            <select
-              className="scope-select"
-              value={scopeMode}
-              onChange={(event) => setScopeMode(event.target.value as (typeof scopeModes)[number])}
-            >
-              {scopeModes.map((mode) => (
-                <option key={mode} value={mode}>
-                  {mode}
-                </option>
-              ))}
-            </select>
-          </label>
-        </section>
-      );
-    }
-
-    return null;
-  };
-
-  const renderTabPanel = (tab: TabName) => (
-    <section
-      className={[
-        "tab-panel",
-        tab === "Knockout" ? "tab-panel-knockout" : "",
-        tab === "Fixtures" ? "tab-panel-fixtures" : "",
-      ].filter(Boolean).join(" ")}
-    >
-      {renderTabContent(tab)}
-    </section>
-  );
-
-  const renderTabScreen = (tab: TabName, layer: TabScreenLayer) => {
-    const isOutgoing = layer === "outgoing";
-    const isIncoming = layer === "incoming";
-    const directionClass = isOutgoing
-      ? transitionDirection === "forward"
-        ? "tab-screen-exit-left"
-        : "tab-screen-exit-right"
-      : isIncoming
-        ? transitionDirection === "forward"
-          ? "tab-screen-enter-right"
-          : "tab-screen-enter-left"
-        : "";
-
-    return (
-      <div
-        key={`${layer}-${tab}`}
-        aria-hidden={isOutgoing ? "true" : undefined}
-        className={[
-          "tab-screen",
-          isOutgoing ? "tab-screen-outgoing" : "",
-          isIncoming ? "tab-screen-incoming" : "",
-          directionClass,
-        ].filter(Boolean).join(" ")}
-        data-tab-screen={tab}
-        inert={isOutgoing ? true : undefined}
-        onTouchStart={isOutgoing ? undefined : handleTabTouchStart}
-        onTouchEnd={isOutgoing ? undefined : handleTabTouchEnd}
-        onTouchCancel={
-          isOutgoing
-            ? undefined
-            : () => {
-                swipeStart.current = null;
-              }
-        }
-        onAnimationEnd={
-          isIncoming
-            ? (event) => {
-                if (event.currentTarget === event.target) {
-                  completeTabTransition();
-                }
-              }
-            : undefined
-        }
-      >
-        {renderTabToolbar(tab)}
-        {renderTabPanel(tab)}
-      </div>
-    );
   };
 
   return (
@@ -460,6 +252,51 @@ export function AppShell({
           </nav>
         </section>
 
+        {homeStatus === "ready" && activeTab === "Fixtures" ? (
+          <section className="fixture-shell-toolbar">
+            <FixtureFilters
+              activeFilter={fixtureFilter}
+              onFilterChange={setFixtureFilter}
+              onGroupChange={setFixtureGroupOverride}
+              selectedGroup={selectedFixtureGroup}
+            />
+          </section>
+        ) : null}
+
+        {homeStatus === "ready" && activeTab === "Table" ? (
+          <section className="table-shell-toolbar">
+            <div className="table-toggle-group" role="tablist" aria-label="Table detail mode">
+              {tableModes.map((mode) => (
+                <button
+                  key={mode}
+                  aria-selected={tableMode === mode}
+                  className={`table-toggle-button${tableMode === mode ? " active" : ""}`}
+                  role="tab"
+                  type="button"
+                  onClick={() => setTableMode(mode)}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+
+            <label className="scope-select-wrap">
+              <span className="sr-only">Scope</span>
+              <select
+                className="scope-select"
+                value={scopeMode}
+                onChange={(event) => setScopeMode(event.target.value as (typeof scopeModes)[number])}
+              >
+                {scopeModes.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {mode}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </section>
+        ) : null}
+
         {homeStatus === "loading" ? (
           <section className="tab-panel state-card">
             <span className="summary-label">Dashboard</span>
@@ -480,12 +317,38 @@ export function AppShell({
           </section>
         ) : null}
         {homeStatus === "ready" ? (
-          <div className="tab-transition-viewport">
-            <div className="tab-transition-stage">
-              {outgoingTab ? renderTabScreen(outgoingTab, "outgoing") : null}
-              {renderTabScreen(activeTab, outgoingTab ? "incoming" : "active")}
+          <section
+            className={[
+              "tab-panel",
+              activeTab === "Knockout" ? "tab-panel-knockout" : "",
+              activeTab === "Fixtures" ? "tab-panel-fixtures" : "",
+            ].filter(Boolean).join(" ")}
+            onTouchStart={(event) => {
+              swipeStartX.current = event.changedTouches[0]?.clientX ?? null;
+            }}
+            onTouchEnd={(event) => {
+              const startX = swipeStartX.current;
+              const endX = event.changedTouches[0]?.clientX ?? null;
+              swipeStartX.current = null;
+
+              if (startX === null || endX === null) {
+                return;
+              }
+
+              const distance = endX - startX;
+              const threshold = 48;
+
+              if (Math.abs(distance) < threshold) {
+                return;
+              }
+
+              handleSwipeToTab(distance < 0 ? "left" : "right");
+            }}
+          >
+            <div key={activeTab} className={`tab-panel-content slide-from-${transitionDirection}`}>
+              {content}
             </div>
-          </div>
+          </section>
         ) : null}
       </div>
 

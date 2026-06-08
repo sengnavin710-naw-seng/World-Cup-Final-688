@@ -522,55 +522,18 @@ button {
   padding-inline: 0;
 }
 
-.tab-transition-viewport {
-  min-width: 0;
-  overflow-x: clip;
-}
-
-.tab-transition-stage {
-  position: relative;
-  min-width: 0;
-}
-
-.tab-screen {
-  min-width: 0;
-}
-
-.tab-screen-incoming,
-.tab-screen-outgoing {
-  animation-duration: 280ms;
-  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+.tab-panel-content {
+  animation-duration: 220ms;
+  animation-timing-function: ease;
   animation-fill-mode: both;
-  will-change: transform, opacity;
 }
 
-.tab-screen-incoming {
-  position: relative;
-  z-index: 2;
+.slide-from-right {
+  animation-name: tab-slide-from-right;
 }
 
-.tab-screen-outgoing {
-  position: absolute;
-  z-index: 1;
-  inset: 0;
-  width: 100%;
-  pointer-events: none;
-}
-
-.tab-screen-enter-right {
-  animation-name: tab-screen-enter-right;
-}
-
-.tab-screen-enter-left {
-  animation-name: tab-screen-enter-left;
-}
-
-.tab-screen-exit-left {
-  animation-name: tab-screen-exit-left;
-}
-
-.tab-screen-exit-right {
-  animation-name: tab-screen-exit-right;
+.slide-from-left {
+  animation-name: tab-slide-from-left;
 }
 
 .grid-two {
@@ -1630,10 +1593,10 @@ button {
   margin-top: 16px;
 }
 
-@keyframes tab-screen-enter-right {
+@keyframes tab-slide-from-right {
   from {
-    opacity: 0.82;
-    transform: translateX(36px);
+    opacity: 0;
+    transform: translateX(20px);
   }
 
   to {
@@ -1642,46 +1605,15 @@ button {
   }
 }
 
-@keyframes tab-screen-enter-left {
+@keyframes tab-slide-from-left {
   from {
-    opacity: 0.82;
-    transform: translateX(-36px);
+    opacity: 0;
+    transform: translateX(-20px);
   }
 
   to {
     opacity: 1;
     transform: translateX(0);
-  }
-}
-
-@keyframes tab-screen-exit-left {
-  from {
-    opacity: 1;
-    transform: translateX(0);
-  }
-
-  to {
-    opacity: 0.82;
-    transform: translateX(-36px);
-  }
-}
-
-@keyframes tab-screen-exit-right {
-  from {
-    opacity: 1;
-    transform: translateX(0);
-  }
-
-  to {
-    opacity: 0.82;
-    transform: translateX(36px);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tab-screen-incoming,
-  .tab-screen-outgoing {
-    animation: none;
   }
 }
 
