@@ -1219,6 +1219,21 @@ button {
   padding: 20px;
 }
 
+.display-name-dialog h3 {
+  margin: 0 0 16px;
+}
+
+.display-name-field {
+  display: grid;
+  gap: 8px;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.display-name-dialog .error-text {
+  margin: 10px 0 0;
+}
+
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
