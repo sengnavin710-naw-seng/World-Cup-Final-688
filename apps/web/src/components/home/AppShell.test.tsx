@@ -3,7 +3,25 @@ import { readFileSync } from "node:fs";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import App from "../../App";
 
+function setReducedMotionPreference(matches: boolean) {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+}
+
 beforeEach(() => {
+  setReducedMotionPreference(false);
   window.localStorage.clear();
   window.localStorage.setItem(
     "wcf688-session",
@@ -166,6 +184,74 @@ test("changes tabs for a primarily horizontal swipe", async () => {
   );
 });
 
+test("slides the previous screen out while the next screen enters", async () => {
+  render(<App />);
+  await screen.findByLabelText("World Cup knockout bracket");
+
+  fireEvent.click(screen.getByRole("tab", { name: "Fixtures" }));
+
+  const outgoing = document.querySelector('[data-tab-screen="Knockout"]');
+  const incoming = document.querySelector('[data-tab-screen="Fixtures"]');
+
+  expect(outgoing).toHaveClass("tab-screen-outgoing", "tab-screen-exit-left");
+  expect(outgoing).toHaveAttribute("aria-hidden", "true");
+  expect(incoming).toHaveClass("tab-screen-incoming", "tab-screen-enter-right");
+
+  fireEvent.animationEnd(incoming!);
+
+  expect(document.querySelector('[data-tab-screen="Knockout"]')).not.toBeInTheDocument();
+  expect(document.querySelector('[data-tab-screen="Fixtures"]')).toBeInTheDocument();
+});
+
+test("reverses slide direction when navigating to a previous tab", async () => {
+  render(<App />);
+  await screen.findByLabelText("World Cup knockout bracket");
+
+  fireEvent.click(screen.getByRole("tab", { name: "Table" }));
+
+  const tableScreen = document.querySelector('[data-tab-screen="Table"]');
+  expect(tableScreen).toBeInTheDocument();
+  fireEvent.animationEnd(tableScreen!);
+
+  fireEvent.click(screen.getByRole("tab", { name: "Fixtures" }));
+
+  expect(document.querySelector('[data-tab-screen="Table"]')).toHaveClass(
+    "tab-screen-exit-right",
+  );
+  expect(document.querySelector('[data-tab-screen="Fixtures"]')).toHaveClass(
+    "tab-screen-enter-left",
+  );
+});
+
+test("ignores repeated tab changes while a slide transition is active", async () => {
+  render(<App />);
+  await screen.findByLabelText("World Cup knockout bracket");
+
+  fireEvent.click(screen.getByRole("tab", { name: "Fixtures" }));
+  fireEvent.click(screen.getByRole("tab", { name: "Table" }));
+
+  expect(screen.getByRole("tab", { name: "Fixtures" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  expect(screen.getByRole("tab", { name: "Table" })).toHaveAttribute(
+    "aria-selected",
+    "false",
+  );
+});
+
+test("changes tabs immediately when reduced motion is preferred", async () => {
+  setReducedMotionPreference(true);
+  render(<App />);
+  await screen.findByLabelText("World Cup knockout bracket");
+
+  fireEvent.click(screen.getByRole("tab", { name: "Fixtures" }));
+
+  expect(document.querySelector('[data-tab-screen="Knockout"]')).not.toBeInTheDocument();
+  expect(document.querySelector('[data-tab-screen="Fixtures"]')).toBeInTheDocument();
+  expect(document.querySelector(".tab-screen-outgoing")).not.toBeInTheDocument();
+});
+
 test("renders fixture filters in a toolbar above the fixtures panel", async () => {
   render(<App />);
 
@@ -175,6 +261,7 @@ test("renders fixture filters in a toolbar above the fixtures panel", async () =
   const fixtureList = document.querySelector(".fixture-list");
 
   expect(fixtureFilters.closest(".fixture-shell-toolbar")).toBeInTheDocument();
+  expect(fixtureFilters.closest('[data-tab-screen="Fixtures"]')).toBeInTheDocument();
   expect(fixtureFilters.closest(".tab-panel")).not.toBeInTheDocument();
   expect(fixtureFilters).toHaveClass("fixture-filter-row-fill");
   expect(fixtureFilters.querySelectorAll("button")).toHaveLength(4);
