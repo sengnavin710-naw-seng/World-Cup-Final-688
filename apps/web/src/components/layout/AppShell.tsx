@@ -319,22 +319,13 @@ export function AppShell({
     return null;
   };
 
-  const renderTabPanel = (tab: TabName, isOutgoing: boolean) => (
+  const renderTabPanel = (tab: TabName) => (
     <section
       className={[
         "tab-panel",
         tab === "Knockout" ? "tab-panel-knockout" : "",
         tab === "Fixtures" ? "tab-panel-fixtures" : "",
       ].filter(Boolean).join(" ")}
-      onTouchStart={isOutgoing ? undefined : handleTabTouchStart}
-      onTouchEnd={isOutgoing ? undefined : handleTabTouchEnd}
-      onTouchCancel={
-        isOutgoing
-          ? undefined
-          : () => {
-              swipeStart.current = null;
-            }
-      }
     >
       {renderTabContent(tab)}
     </section>
@@ -365,6 +356,15 @@ export function AppShell({
         ].filter(Boolean).join(" ")}
         data-tab-screen={tab}
         inert={isOutgoing ? true : undefined}
+        onTouchStart={isOutgoing ? undefined : handleTabTouchStart}
+        onTouchEnd={isOutgoing ? undefined : handleTabTouchEnd}
+        onTouchCancel={
+          isOutgoing
+            ? undefined
+            : () => {
+                swipeStart.current = null;
+              }
+        }
         onAnimationEnd={
           isIncoming
             ? (event) => {
@@ -376,7 +376,7 @@ export function AppShell({
         }
       >
         {renderTabToolbar(tab)}
-        {renderTabPanel(tab, isOutgoing)}
+        {renderTabPanel(tab)}
       </div>
     );
   };

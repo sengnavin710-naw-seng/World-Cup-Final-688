@@ -184,6 +184,26 @@ test("changes tabs for a primarily horizontal swipe", async () => {
   );
 });
 
+test("changes tabs when swiping the active tab screen outside the panel", async () => {
+  render(<App />);
+  await screen.findByLabelText("World Cup knockout bracket");
+
+  const activeScreen = document.querySelector('[data-tab-screen="Knockout"]');
+  expect(activeScreen).toBeInstanceOf(HTMLElement);
+
+  fireEvent.touchStart(activeScreen!, {
+    changedTouches: [{ clientX: 150, clientY: 100 }],
+  });
+  fireEvent.touchEnd(activeScreen!, {
+    changedTouches: [{ clientX: 70, clientY: 108 }],
+  });
+
+  expect(screen.getByRole("tab", { name: "Fixtures" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+});
+
 test("slides the previous screen out while the next screen enters", async () => {
   render(<App />);
   await screen.findByLabelText("World Cup knockout bracket");
@@ -290,5 +310,21 @@ test("uses compact mobile spacing around fixture date headings", () => {
   );
   expect(applicationStyles).toMatch(
     /\.fixture-section-card \+ \.fixture-section-card\s*\{[\s\S]*?padding-top:\s*10px;/,
+  );
+});
+
+test("defines coordinated tab screen slide animations", () => {
+  const applicationStyles = readFileSync("src/styles.css", "utf8");
+
+  expect(applicationStyles).toMatch(
+    /\.tab-transition-viewport\s*\{[\s\S]*?overflow-x:\s*clip;/,
+  );
+  expect(applicationStyles).toContain("animation-duration: 280ms;");
+  expect(applicationStyles).toContain("@keyframes tab-screen-enter-right");
+  expect(applicationStyles).toContain("@keyframes tab-screen-enter-left");
+  expect(applicationStyles).toContain("@keyframes tab-screen-exit-left");
+  expect(applicationStyles).toContain("@keyframes tab-screen-exit-right");
+  expect(applicationStyles).toMatch(
+    /@media \(prefers-reduced-motion: reduce\)[\s\S]*?animation:\s*none;/,
   );
 });
