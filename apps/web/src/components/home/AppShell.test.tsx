@@ -124,6 +124,48 @@ test("renders the knockout panel without the default tab padding", async () => {
   expect(knockoutBracket.closest(".tab-panel")).toHaveClass("tab-panel-knockout");
 });
 
+test("does not change tabs when a vertical scroll drifts horizontally", async () => {
+  render(<App />);
+
+  const knockoutBracket = await screen.findByLabelText("World Cup knockout bracket");
+  const tabPanel = knockoutBracket.closest(".tab-panel");
+
+  expect(tabPanel).toBeInstanceOf(HTMLElement);
+
+  fireEvent.touchStart(tabPanel!, {
+    changedTouches: [{ clientX: 120, clientY: 100 }],
+  });
+  fireEvent.touchEnd(tabPanel!, {
+    changedTouches: [{ clientX: 60, clientY: 300 }],
+  });
+
+  expect(screen.getByRole("tab", { name: "Knockout" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+});
+
+test("changes tabs for a primarily horizontal swipe", async () => {
+  render(<App />);
+
+  const knockoutBracket = await screen.findByLabelText("World Cup knockout bracket");
+  const tabPanel = knockoutBracket.closest(".tab-panel");
+
+  expect(tabPanel).toBeInstanceOf(HTMLElement);
+
+  fireEvent.touchStart(tabPanel!, {
+    changedTouches: [{ clientX: 140, clientY: 100 }],
+  });
+  fireEvent.touchEnd(tabPanel!, {
+    changedTouches: [{ clientX: 60, clientY: 110 }],
+  });
+
+  expect(screen.getByRole("tab", { name: "Fixtures" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+});
+
 test("renders fixture filters in a toolbar above the fixtures panel", async () => {
   render(<App />);
 

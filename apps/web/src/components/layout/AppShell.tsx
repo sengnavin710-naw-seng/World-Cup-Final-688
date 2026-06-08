@@ -45,7 +45,7 @@ export function AppShell({
   onResetDevice,
   participant,
 }: AppShellProps) {
-  const swipeStartX = useRef<number | null>(null);
+  const swipeStart = useRef<{ x: number; y: number } | null>(null);
   const [activeTab, setActiveTab] = useState<(typeof tabs)[number]>("Knockout");
   const [fixtureFilter, setFixtureFilter] = useState<FixtureFilter>("Date");
   const [fixtureGroupOverride, setFixtureGroupOverride] = useState("");
@@ -324,25 +324,35 @@ export function AppShell({
               activeTab === "Fixtures" ? "tab-panel-fixtures" : "",
             ].filter(Boolean).join(" ")}
             onTouchStart={(event) => {
-              swipeStartX.current = event.changedTouches[0]?.clientX ?? null;
+              const touch = event.changedTouches[0];
+              swipeStart.current = touch
+                ? { x: touch.clientX, y: touch.clientY }
+                : null;
             }}
             onTouchEnd={(event) => {
-              const startX = swipeStartX.current;
-              const endX = event.changedTouches[0]?.clientX ?? null;
-              swipeStartX.current = null;
+              const start = swipeStart.current;
+              const touch = event.changedTouches[0];
+              swipeStart.current = null;
 
-              if (startX === null || endX === null) {
+              if (!start || !touch) {
                 return;
               }
 
-              const distance = endX - startX;
+              const horizontalDistance = touch.clientX - start.x;
+              const verticalDistance = touch.clientY - start.y;
               const threshold = 48;
 
-              if (Math.abs(distance) < threshold) {
+              if (
+                Math.abs(horizontalDistance) < threshold ||
+                Math.abs(horizontalDistance) <= Math.abs(verticalDistance)
+              ) {
                 return;
               }
 
-              handleSwipeToTab(distance < 0 ? "left" : "right");
+              handleSwipeToTab(horizontalDistance < 0 ? "left" : "right");
+            }}
+            onTouchCancel={() => {
+              swipeStart.current = null;
             }}
           >
             <div key={activeTab} className={`tab-panel-content slide-from-${transitionDirection}`}>
