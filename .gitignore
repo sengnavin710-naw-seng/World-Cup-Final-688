@@ -3,6 +3,7 @@ node_modules/
 dist/
 apps/*/dist/
 coverage/
+outputs/
 .DS_Store
 .env
 *.log

@@ -134,12 +134,22 @@ test("does not block the knockout dashboard while team availability is pending",
   expect(await screen.findByLabelText("World Cup knockout bracket")).toBeInTheDocument();
 });
 
-test("renders the knockout panel without the default tab padding", async () => {
+test("renders the knockout panel as a full-bleed bracket surface", async () => {
   render(<App />);
 
   const knockoutBracket = await screen.findByLabelText("World Cup knockout bracket");
+  const applicationStyles = readFileSync("src/styles.css", "utf8");
 
   expect(knockoutBracket.closest(".tab-panel")).toHaveClass("tab-panel-knockout");
+  expect(applicationStyles).toMatch(
+    /\.tab-panel\s*\{[^}]*padding:\s*20px;/,
+  );
+  expect(applicationStyles).toMatch(
+    /\.tab-panel-knockout\s*\{[^}]*padding:\s*0;/,
+  );
+  expect(applicationStyles).toMatch(
+    /\.tab-panel-knockout\s*\{[^}]*margin-top:\s*-8px;/,
+  );
 });
 
 test("does not change tabs when a vertical scroll drifts horizontally", async () => {
@@ -223,6 +233,28 @@ test("slides the previous screen out while the next screen enters", async () => 
   expect(document.querySelector('[data-tab-screen="Fixtures"]')).toBeInTheDocument();
 });
 
+test("uses the same page frame while leaving the knockout tab", async () => {
+  render(<App />);
+  await screen.findByLabelText("World Cup knockout bracket");
+
+  const shell = document.querySelector(".app-shell");
+  const chrome = document.querySelector(".home-chrome");
+
+  expect(shell).not.toHaveClass("app-shell-knockout");
+  expect(chrome).not.toHaveClass("home-chrome-knockout");
+
+  fireEvent.click(screen.getByRole("tab", { name: "Fixtures" }));
+
+  expect(shell).not.toHaveClass("app-shell-knockout");
+  expect(chrome).not.toHaveClass("home-chrome-knockout");
+
+  const incoming = document.querySelector('[data-tab-screen="Fixtures"]');
+  fireEvent.animationEnd(incoming!);
+
+  expect(shell).not.toHaveClass("app-shell-knockout");
+  expect(chrome).not.toHaveClass("home-chrome-knockout");
+});
+
 test("reverses slide direction when navigating to a previous tab", async () => {
   render(<App />);
   await screen.findByLabelText("World Cup knockout bracket");
@@ -299,9 +331,6 @@ test("uses the multilingual application font stack", () => {
 test("uses compact mobile spacing around fixture date headings", () => {
   const applicationStyles = readFileSync("src/styles.css", "utf8");
 
-  expect(applicationStyles).toMatch(
-    /\.tab-panel-fixtures\s*\{[\s\S]*?padding-top:\s*6px;/,
-  );
   expect(applicationStyles).toMatch(
     /\.fixture-section-card\s*\{[\s\S]*?padding:\s*4px 14px 16px;/,
   );

@@ -19,8 +19,8 @@ type ResolvedKnockoutTeam = {
 const board = {
   width: 1280,
   height: 684,
-  cardWidth: 92,
-  cardHeight: 88,
+  cardWidth: 86,
+  cardHeight: 80,
 };
 
 const leftColumnX = new Map([
@@ -31,10 +31,10 @@ const leftColumnX = new Map([
 ]);
 
 const rightColumnX = new Map([
-  [1, 1188],
-  [2, 1018],
-  [3, 858],
-  [4, 708],
+  [1, 1194],
+  [2, 1024],
+  [3, 864],
+  [4, 714],
 ]);
 
 const rowCenters = new Map([
@@ -45,15 +45,19 @@ const rowCenters = new Map([
 ]);
 
 const mobileBoard = {
-  cardWidth: 300,
-  cardHeight: 108,
-  finalCardHeight: 136,
-  columnGap: 86,
-  rowGap: 24,
-  left: 14,
-  top: 28,
-  bottom: 34,
+  cardWidth: 240,
+  cardHeight: 82,
+  finalCardHeight: 100,
+  columnGap: 50,
+  rowGap: 14,
+  left: 8,
+  top: 14,
+  bottom: 82,
 };
+
+const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+const monthLabels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+const defaultKnockoutKickoffTime = "03:00";
 
 function getSideColumnX(side: BracketSide, column: number) {
   return (side === "left" ? leftColumnX : rightColumnX).get(column) ?? 0;
@@ -91,30 +95,6 @@ function getBracketMatches(rounds: KnockoutRound[]) {
   );
 }
 
-function getShortRoundLabel(round: string) {
-  if (round.includes("32")) {
-    return "R32";
-  }
-
-  if (round.includes("16")) {
-    return "R16";
-  }
-
-  if (round.toLowerCase().includes("quarter")) {
-    return "QF";
-  }
-
-  if (round.toLowerCase().includes("semi")) {
-    return "SF";
-  }
-
-  if (round.toLowerCase().includes("final")) {
-    return "Final";
-  }
-
-  return round;
-}
-
 function isFinalRound(round: string) {
   return round.toLowerCase().includes("final");
 }
@@ -133,6 +113,27 @@ function getMobileMatchLabel(match: BracketMatch) {
   }
 
   return match.round;
+}
+
+function formatKnockoutKickoff(kickoff: string) {
+  const normalized = kickoff.trim();
+  const match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2}))?/);
+
+  if (!match) {
+    return {
+      dateTime: undefined,
+      label: normalized,
+    };
+  }
+
+  const [, year, month, day, hour, minute] = match;
+  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  const time = hour && minute ? `${hour}:${minute}` : defaultKnockoutKickoffTime;
+
+  return {
+    dateTime: `${year}-${month}-${day}T${time}`,
+    label: `${weekdayLabels[date.getUTCDay()]}, ${monthLabels[date.getUTCMonth()]} ${Number(day)}\n${time}`,
+  };
 }
 
 function resolveKnockoutTeam(value: string, teams: Team[]): ResolvedKnockoutTeam {
@@ -359,6 +360,7 @@ function getConnectorPaths() {
 
 function MatchCard({ match, teams }: { match: BracketMatch; teams: Team[] }) {
   const position = getMatchPosition(match);
+  const kickoff = formatKnockoutKickoff(match.kickoff);
   const style = {
     left: position.x,
     top: position.y,
@@ -366,7 +368,7 @@ function MatchCard({ match, teams }: { match: BracketMatch; teams: Team[] }) {
 
   return (
     <article
-      aria-label={`${match.round}: ${match.homeTeam} vs ${match.awayTeam}, ${match.kickoff}`}
+      aria-label={`${match.round}: ${match.homeTeam} vs ${match.awayTeam}, ${kickoff.label.replace("\n", " ")}`}
       className={`knockout-card${match.badge ? " knockout-card-featured" : ""}`}
       data-badge={match.badge}
       style={style}
@@ -379,7 +381,7 @@ function MatchCard({ match, teams }: { match: BracketMatch; teams: Team[] }) {
         <KnockoutTeamName teams={teams} value={match.homeTeam} />
         <KnockoutTeamName teams={teams} value={match.awayTeam} />
       </div>
-      <div className="knockout-card-date">{match.kickoff}</div>
+      <time className="knockout-card-date" dateTime={kickoff.dateTime}>{kickoff.label}</time>
       {match.badge ? <span className="knockout-card-badge">{match.badge}</span> : null}
     </article>
   );
@@ -392,6 +394,7 @@ function MobileBracketMatchCard({
   match: MobilePositionedMatch;
   teams: Team[];
 }) {
+  const kickoff = formatKnockoutKickoff(match.kickoff);
   const style = {
     "--knockout-mobile-card-height": `${match.height}px`,
     left: match.x,
@@ -400,7 +403,7 @@ function MobileBracketMatchCard({
 
   return (
     <article
-      aria-label={`${match.round}: ${match.homeTeam} vs ${match.awayTeam}, ${match.kickoff}`}
+      aria-label={`${match.round}: ${match.homeTeam} vs ${match.awayTeam}, ${kickoff.label.replace("\n", " ")}`}
       className={`knockout-mobile-bracket-card${match.badge === "FINAL" ? " knockout-mobile-bracket-final" : ""}`}
       data-badge={match.badge}
       style={style}
@@ -412,7 +415,7 @@ function MobileBracketMatchCard({
 
       {match.badge === "FINAL" ? (
         <div className="knockout-mobile-final-mark" aria-hidden="true">
-          <Trophy size={46} strokeWidth={1.45} />
+          <Trophy size={36} strokeWidth={1.45} />
           <span>?</span>
         </div>
       ) : null}
@@ -428,7 +431,7 @@ function MobileBracketMatchCard({
             <KnockoutTeamName teams={teams} value={match.awayTeam} />
           </div>
         </div>
-        <time>{match.kickoff}</time>
+        <time dateTime={kickoff.dateTime}>{kickoff.label}</time>
       </div>
     </article>
   );
@@ -535,10 +538,10 @@ export function KnockoutTab({
               className="knockout-round-chip"
               role="tab"
               type="button"
+              aria-label={round.round}
               onClick={() => handleMobileRoundSelect(round, roundIndex)}
             >
-              <strong>{getShortRoundLabel(round.round)}</strong>
-              <span>{round.matches.length} games</span>
+              <strong>{round.round}</strong>
             </button>
           ))}
         </div>
