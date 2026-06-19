@@ -236,7 +236,13 @@ export function AppShell({
 
   const renderTabContent = (tab: TabName) => {
     if (tab === "Knockout") {
-      return <KnockoutTab rounds={knockout} teams={teams} />;
+      return (
+        <KnockoutTab
+          onFastForwardSwipe={() => handleTabChange("Fixtures")}
+          rounds={knockout}
+          teams={teams}
+        />
+      );
     }
 
     if (tab === "Fixtures") {

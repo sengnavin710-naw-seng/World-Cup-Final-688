@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import { readFileSync } from "node:fs";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import App from "../../App";
 
 function setReducedMotionPreference(matches: boolean) {
@@ -187,6 +187,43 @@ test("changes tabs for a primarily horizontal swipe", async () => {
   fireEvent.touchEnd(tabPanel!, {
     changedTouches: [{ clientX: 60, clientY: 110 }],
   });
+
+  expect(screen.getByRole("tab", { name: "Fixtures" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+});
+
+test("moves from the knockout bracket to fixtures after a very fast forward swipe", async () => {
+  render(<App />);
+
+  const mobileBracket = await screen.findByLabelText("World Cup knockout rounds");
+  const scroller = mobileBracket.querySelector(".knockout-mobile-bracket-scroll");
+  expect(scroller).toBeInstanceOf(HTMLDivElement);
+
+  Object.defineProperties(scroller!, {
+    scrollLeft: {
+      configurable: true,
+      value: 0,
+      writable: true,
+    },
+    scrollTo: {
+      configurable: true,
+      value: vi.fn(),
+    },
+  });
+
+  const touchStart = createEvent.touchStart(scroller!, {
+    touches: [{ clientX: 300, clientY: 100 }],
+  });
+  Object.defineProperty(touchStart, "timeStamp", { value: 1_000 });
+  fireEvent(scroller!, touchStart);
+
+  const touchEnd = createEvent.touchEnd(scroller!, {
+    changedTouches: [{ clientX: 70, clientY: 104 }],
+  });
+  Object.defineProperty(touchEnd, "timeStamp", { value: 1_100 });
+  fireEvent(scroller!, touchEnd);
 
   expect(screen.getByRole("tab", { name: "Fixtures" })).toHaveAttribute(
     "aria-selected",
