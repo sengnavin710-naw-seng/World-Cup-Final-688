@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import { readFileSync } from "node:fs";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { vi } from "vitest";
 import type { GroupStanding } from "../../lib/types";
 import { TableTab } from "./TableTab";
 
@@ -88,4 +89,28 @@ test("keeps full table team names readable at small and large widths", () => {
   expect(applicationStyles).toMatch(
     /\.group-cards-grid\.table-mode-full\s*\{[\s\S]*?minmax\(560px,\s*1fr\)/,
   );
+});
+
+test("keeps horizontal table gestures from reaching the tab swipe handler", () => {
+  const handleParentTouchStart = vi.fn();
+  const handleParentTouchEnd = vi.fn();
+  const { container } = render(
+    <div onTouchEnd={handleParentTouchEnd} onTouchStart={handleParentTouchStart}>
+      <TableTab
+        companyPicks={[]}
+        scopeMode="Overall"
+        standings={standings}
+        tableMode="Full"
+      />
+    </div>,
+  );
+
+  const tableScroll = container.querySelector(".group-table-scroll");
+  expect(tableScroll).not.toBeNull();
+
+  fireEvent.touchStart(tableScroll!);
+  fireEvent.touchEnd(tableScroll!);
+
+  expect(handleParentTouchStart).not.toHaveBeenCalled();
+  expect(handleParentTouchEnd).not.toHaveBeenCalled();
 });

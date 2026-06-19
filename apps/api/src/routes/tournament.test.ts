@@ -30,12 +30,16 @@ test("teams endpoint returns 48 teams", async () => {
 test("knockout endpoint returns the full bracket layout", async () => {
   const app = createServer();
   const response = await request(app).get("/api/tournament/knockout");
+  const quarterFinals = response.body.knockout.find(
+    (round: { round: string }) => round.round === "Quarter-finals",
+  );
   const matches = response.body.knockout.flatMap(
     (round: { matches: Array<{ badge?: string; side?: string }> }) => round.matches,
   );
 
   expect(response.status).toBe(200);
   expect(response.body.knockout).toHaveLength(5);
+  expect(quarterFinals.matches).toHaveLength(4);
   expect(matches).toHaveLength(32);
   expect(matches.filter((match: { side?: string }) => match.side === "center")).toHaveLength(2);
   expect(matches).toEqual(
