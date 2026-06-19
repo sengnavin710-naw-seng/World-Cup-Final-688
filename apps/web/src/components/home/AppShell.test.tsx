@@ -1,7 +1,8 @@
 import "@testing-library/jest-dom/vitest";
 import { readFileSync } from "node:fs";
-import { createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { createEvent, fireEvent, screen, waitFor } from "@testing-library/react";
 import App from "../../App";
+import { renderWithQueryClient as render } from "../../test/renderWithQueryClient";
 
 function setReducedMotionPreference(matches: boolean) {
   Object.defineProperty(window, "matchMedia", {
