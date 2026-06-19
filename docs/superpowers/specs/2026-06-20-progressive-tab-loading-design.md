@@ -91,6 +91,8 @@ The swipe layer is separate from the data layer.
 
 Only the active tab and immediate neighbors render in the track. Heavy distant tabs are not mounted. Once a tab leaves the neighbor window, its component may unmount while its query data remains cached.
 
+The carousel viewport follows the measured height of the active slide through `ResizeObserver`. Taller adjacent slides are clipped until they become active, so a short tab does not inherit empty space from Knockout or Table. The height is content-driven rather than fixed and updates when lazy content or images change size.
+
 The existing 360 ms outgoing-tab lock will be removed. A short transform transition will settle the track, while tab-button centering occurs immediately without smooth scrolling. Reduced-motion users get an immediate tab replacement with no transform animation.
 
 ## Loading and Error States
@@ -111,6 +113,7 @@ Each tab has an independent error boundary at the query state level. A News fail
 - `apps/web/src/lib/queryClient.ts`: hold query defaults and shared cache policy.
 - `apps/web/src/lib/tournamentQueries.ts`: define query keys, query options, and tab prefetch helpers.
 - `apps/web/src/components/layout/tabModules.ts`: centralize lazy imports and module preload functions.
+- `apps/web/src/components/home/FixtureFilters.tsx`: keep the small Fixtures toolbar eager while the heavier fixture list remains in a lazy chunk.
 - `apps/web/src/hooks/useTabSwipe.ts`: own pointer tracking, dominant-axis detection, velocity, clamping, and snap destination.
 - `apps/web/src/components/layout/TabCarousel.tsx`: render the active and adjacent tab screens and apply transforms.
 - `apps/web/src/components/layout/AppShell.tsx`: retain shell controls and active-tab coordination, while removing the global dashboard `Promise.all` and outgoing-tab timer.
