@@ -19,6 +19,13 @@ const preloadFixturesTab = createModulePreloader(() => import("../home/FixturesT
 const preloadTableTab = createModulePreloader(() => import("../home/TableTab"));
 const preloadNewsTab = createModulePreloader(() => import("../home/NewsTab"));
 
+const tabPreloaders = {
+  Knockout: preloadKnockoutTab,
+  Fixtures: preloadFixturesTab,
+  Table: preloadTableTab,
+  News: preloadNewsTab
+} satisfies Record<HomeTab, () => Promise<unknown>>;
+
 export const LazyKnockoutTab = lazy(() =>
   preloadKnockoutTab().then((module) => ({ default: module.KnockoutTab })),
 );
@@ -33,17 +40,5 @@ export const LazyNewsTab = lazy(() =>
 );
 
 export function preloadTabModule(tab: HomeTab) {
-  if (tab === "Knockout") {
-    return preloadKnockoutTab();
-  }
-
-  if (tab === "Fixtures") {
-    return preloadFixturesTab();
-  }
-
-  if (tab === "Table") {
-    return preloadTableTab();
-  }
-
-  return preloadNewsTab();
+  return tabPreloaders[tab]();
 }
