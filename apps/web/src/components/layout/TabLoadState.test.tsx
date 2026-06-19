@@ -27,6 +27,8 @@ describe("TabRefreshNotice", () => {
 
     render(<TabRefreshNotice onRetry={onRetry} />);
 
+    expect(screen.getByRole("status")).toHaveClass("tab-refresh-notice");
+
     fireEvent.click(screen.getByRole("button", { name: "Refresh again" }));
 
     expect(onRetry).toHaveBeenCalledTimes(1);

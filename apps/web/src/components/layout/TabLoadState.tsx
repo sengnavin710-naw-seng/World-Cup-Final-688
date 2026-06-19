@@ -10,7 +10,7 @@ type TabLoadStateProps = {
 
 export function TabRefreshNotice({ onRetry }: TabRefreshNoticeProps) {
   return (
-    <div role="status">
+    <div className="tab-refresh-notice" role="status">
       <span>Showing saved data. Refresh failed.</span>
       <button type="button" onClick={onRetry}>
         Refresh again
@@ -37,7 +37,7 @@ export function TabLoadState({ label, onRetry, state }: TabLoadStateProps) {
   return (
     <div className="tab-local-error" role="alert">
       <strong>{`Unable to load ${label}.`}</strong>
-      <button type="button" className="primary" onClick={onRetry}>
+      <button type="button" className="primary-button" onClick={onRetry}>
         Retry
       </button>
     </div>
