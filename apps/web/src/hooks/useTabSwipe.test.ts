@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { createElement, useState, type MutableRefObject } from "react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { resolveSwipeDelta, useTabSwipe } from "./useTabSwipe";
@@ -42,7 +42,13 @@ function SwipeHarness({
   );
 }
 
-function SettlingSwipeHarness({ onIndexChange }: { onIndexChange: (nextIndex: number) => void; }) {
+function SettlingSwipeHarness({
+  onIndexChange,
+  reducedMotion = false,
+}: {
+  onIndexChange: (nextIndex: number) => void;
+  reducedMotion?: boolean;
+}) {
   const [activeIndex, setActiveIndex] = useState(1);
   const swipe = useTabSwipe({
     activeIndex,
@@ -50,7 +56,7 @@ function SettlingSwipeHarness({ onIndexChange }: { onIndexChange: (nextIndex: nu
       onIndexChange(nextIndex);
       setActiveIndex(nextIndex);
     },
-    reducedMotion: false,
+    reducedMotion,
     tabCount: 4,
   });
 
@@ -77,6 +83,61 @@ function SettlingSwipeHarness({ onIndexChange }: { onIndexChange: (nextIndex: nu
       "data-testid": "swipe-track",
       ref: swipe.trackRef,
     }),
+  );
+}
+
+function ExternalSelectionHarness({
+  onIndexChange,
+}: {
+  onIndexChange: (nextIndex: number) => void;
+}) {
+  const [activeIndex, setActiveIndex] = useState(1);
+  const swipe = useTabSwipe({
+    activeIndex,
+    onIndexChange: (nextIndex) => {
+      onIndexChange(nextIndex);
+      setActiveIndex(nextIndex);
+    },
+    reducedMotion: false,
+    tabCount: 4,
+  });
+
+  const setViewportRef = (node: HTMLDivElement | null) => {
+    if (node) {
+      setViewportWidth(node, 390);
+    }
+
+    (swipe.viewportRef as MutableRefObject<HTMLDivElement | null>).current =
+      node;
+  };
+
+  return createElement(
+    "div",
+    {},
+    createElement(
+      "button",
+      {
+        onClick: () => {
+          setActiveIndex(3);
+        },
+      },
+      "Jump to 3",
+    ),
+    createElement(
+      "div",
+      {
+        "data-testid": "swipe-viewport",
+        onPointerCancel: swipe.onPointerCancel,
+        onPointerDown: swipe.onPointerDown,
+        onPointerMove: swipe.onPointerMove,
+        onPointerUp: swipe.onPointerUp,
+        ref: setViewportRef,
+      },
+      createElement("div", {
+        "data-testid": "swipe-track",
+        ref: swipe.trackRef,
+      }),
+    ),
   );
 }
 
@@ -203,6 +264,7 @@ function installControlledResizeObserver() {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -335,6 +397,325 @@ describe("useTabSwipe", () => {
 
     expect(onIndexChange).toHaveBeenCalledTimes(1);
     expect(onIndexChange).toHaveBeenCalledWith(2);
+  });
+
+  test("falls back to the timeout when transform never ends", () => {
+    vi.useFakeTimers();
+
+    const onIndexChange = vi.fn();
+    render(createElement(SettlingSwipeHarness, { onIndexChange }));
+    const viewport = screen.getByTestId("swipe-viewport");
+    const track = screen.getByTestId("swipe-track");
+
+    Object.assign(viewport, {
+      hasPointerCapture: () => false,
+      releasePointerCapture: vi.fn(),
+      setPointerCapture: vi.fn(),
+    });
+
+    firePointerEvent(viewport, "pointerdown", {
+      clientX: 260,
+      clientY: 200,
+      pointerId: 6,
+    });
+    firePointerEvent(viewport, "pointermove", {
+      clientX: 140,
+      clientY: 202,
+      pointerId: 6,
+    });
+    firePointerEvent(viewport, "pointerup", {
+      clientX: 140,
+      clientY: 202,
+      pointerId: 6,
+    });
+
+    expect(onIndexChange).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(379);
+    });
+
+    expect(onIndexChange).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+
+    expect(onIndexChange).toHaveBeenCalledTimes(1);
+    expect(onIndexChange).toHaveBeenCalledWith(2);
+    expect(track.style.transform).toBe("translate3d(-780px, 0, 0)");
+
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    expect(onIndexChange).toHaveBeenCalledTimes(1);
+  });
+
+  test("settles a rejected swipe back to the active tab", () => {
+    const onIndexChange = vi.fn();
+    render(createElement(SettlingSwipeHarness, { onIndexChange }));
+    const viewport = screen.getByTestId("swipe-viewport");
+    const track = screen.getByTestId("swipe-track");
+
+    Object.assign(viewport, {
+      hasPointerCapture: () => false,
+      releasePointerCapture: vi.fn(),
+      setPointerCapture: vi.fn(),
+    });
+
+    firePointerEvent(viewport, "pointerdown", {
+      clientX: 220,
+      clientY: 200,
+      pointerId: 7,
+    });
+    firePointerEvent(viewport, "pointermove", {
+      clientX: 200,
+      clientY: 202,
+      pointerId: 7,
+    });
+    firePointerEvent(viewport, "pointerup", {
+      clientX: 200,
+      clientY: 202,
+      pointerId: 7,
+    });
+
+    expect(onIndexChange).not.toHaveBeenCalled();
+    expect(track.style.transform).toBe("translate3d(-390px, 0, 0)");
+    expect(track.style.transition).toBe(
+      "transform 300ms cubic-bezier(0.4, 0, 0.2, 1)",
+    );
+  });
+
+  test("commits immediately when reduced motion is enabled", () => {
+    vi.useFakeTimers();
+
+    const onIndexChange = vi.fn();
+    render(
+      createElement(SettlingSwipeHarness, {
+        onIndexChange,
+        reducedMotion: true,
+      }),
+    );
+    const viewport = screen.getByTestId("swipe-viewport");
+    const track = screen.getByTestId("swipe-track");
+
+    Object.assign(viewport, {
+      hasPointerCapture: () => false,
+      releasePointerCapture: vi.fn(),
+      setPointerCapture: vi.fn(),
+    });
+
+    firePointerEvent(viewport, "pointerdown", {
+      clientX: 260,
+      clientY: 200,
+      pointerId: 8,
+    });
+    firePointerEvent(viewport, "pointermove", {
+      clientX: 140,
+      clientY: 202,
+      pointerId: 8,
+    });
+    firePointerEvent(viewport, "pointerup", {
+      clientX: 140,
+      clientY: 202,
+      pointerId: 8,
+    });
+
+    expect(onIndexChange).toHaveBeenCalledTimes(1);
+    expect(onIndexChange).toHaveBeenCalledWith(2);
+    expect(track.style.transition).toBe("none");
+
+    act(() => {
+      vi.advanceTimersByTime(380);
+    });
+
+    expect(onIndexChange).toHaveBeenCalledTimes(1);
+  });
+
+  test("ignores non-transform transition end events", () => {
+    vi.useFakeTimers();
+
+    const onIndexChange = vi.fn();
+    render(createElement(SettlingSwipeHarness, { onIndexChange }));
+    const viewport = screen.getByTestId("swipe-viewport");
+    const track = screen.getByTestId("swipe-track");
+
+    Object.assign(viewport, {
+      hasPointerCapture: () => false,
+      releasePointerCapture: vi.fn(),
+      setPointerCapture: vi.fn(),
+    });
+
+    firePointerEvent(viewport, "pointerdown", {
+      clientX: 260,
+      clientY: 200,
+      pointerId: 9,
+    });
+    firePointerEvent(viewport, "pointermove", {
+      clientX: 140,
+      clientY: 202,
+      pointerId: 9,
+    });
+    firePointerEvent(viewport, "pointerup", {
+      clientX: 140,
+      clientY: 202,
+      pointerId: 9,
+    });
+
+    fireTransitionEndEvent(track, "opacity");
+    expect(onIndexChange).not.toHaveBeenCalled();
+
+    fireTransitionEndEvent(track, "transform");
+    expect(onIndexChange).toHaveBeenCalledTimes(1);
+    expect(onIndexChange).toHaveBeenCalledWith(2);
+
+    fireTransitionEndEvent(track, "transform");
+
+    act(() => {
+      vi.advanceTimersByTime(380);
+    });
+
+    expect(onIndexChange).toHaveBeenCalledTimes(1);
+  });
+
+  test("ignores a second gesture while settling", () => {
+    vi.useFakeTimers();
+
+    const onIndexChange = vi.fn();
+    render(createElement(SettlingSwipeHarness, { onIndexChange }));
+    const viewport = screen.getByTestId("swipe-viewport");
+    const track = screen.getByTestId("swipe-track");
+
+    Object.assign(viewport, {
+      hasPointerCapture: () => false,
+      releasePointerCapture: vi.fn(),
+      setPointerCapture: vi.fn(),
+    });
+
+    firePointerEvent(viewport, "pointerdown", {
+      clientX: 260,
+      clientY: 200,
+      pointerId: 10,
+    });
+    firePointerEvent(viewport, "pointermove", {
+      clientX: 140,
+      clientY: 202,
+      pointerId: 10,
+    });
+    firePointerEvent(viewport, "pointerup", {
+      clientX: 140,
+      clientY: 202,
+      pointerId: 10,
+    });
+
+    firePointerEvent(viewport, "pointerdown", {
+      clientX: 140,
+      clientY: 200,
+      pointerId: 11,
+    });
+    firePointerEvent(viewport, "pointermove", {
+      clientX: 300,
+      clientY: 202,
+      pointerId: 11,
+    });
+    firePointerEvent(viewport, "pointerup", {
+      clientX: 300,
+      clientY: 202,
+      pointerId: 11,
+    });
+
+    fireTransitionEndEvent(track, "transform");
+
+    expect(onIndexChange).toHaveBeenCalledTimes(1);
+    expect(onIndexChange).toHaveBeenCalledWith(2);
+  });
+
+  test("cancels a pending settle when the active tab changes externally", () => {
+    vi.useFakeTimers();
+
+    const onIndexChange = vi.fn();
+    render(createElement(ExternalSelectionHarness, { onIndexChange }));
+    const viewport = screen.getByTestId("swipe-viewport");
+    const track = screen.getByTestId("swipe-track");
+
+    Object.assign(viewport, {
+      hasPointerCapture: () => false,
+      releasePointerCapture: vi.fn(),
+      setPointerCapture: vi.fn(),
+    });
+
+    firePointerEvent(viewport, "pointerdown", {
+      clientX: 260,
+      clientY: 200,
+      pointerId: 12,
+    });
+    firePointerEvent(viewport, "pointermove", {
+      clientX: 140,
+      clientY: 202,
+      pointerId: 12,
+    });
+    firePointerEvent(viewport, "pointerup", {
+      clientX: 140,
+      clientY: 202,
+      pointerId: 12,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Jump to 3" }));
+
+    expect(track.style.transform).toBe("translate3d(-1170px, 0, 0)");
+    expect(onIndexChange).not.toHaveBeenCalled();
+
+    fireTransitionEndEvent(track, "transform");
+
+    act(() => {
+      vi.advanceTimersByTime(380);
+    });
+
+    expect(onIndexChange).not.toHaveBeenCalled();
+  });
+
+  test("cleans up a pending settle on unmount", () => {
+    vi.useFakeTimers();
+
+    const onIndexChange = vi.fn();
+    const { unmount } = render(
+      createElement(SettlingSwipeHarness, { onIndexChange }),
+    );
+    const viewport = screen.getByTestId("swipe-viewport");
+    const track = screen.getByTestId("swipe-track");
+
+    Object.assign(viewport, {
+      hasPointerCapture: () => false,
+      releasePointerCapture: vi.fn(),
+      setPointerCapture: vi.fn(),
+    });
+
+    firePointerEvent(viewport, "pointerdown", {
+      clientX: 260,
+      clientY: 200,
+      pointerId: 13,
+    });
+    firePointerEvent(viewport, "pointermove", {
+      clientX: 140,
+      clientY: 202,
+      pointerId: 13,
+    });
+    firePointerEvent(viewport, "pointerup", {
+      clientX: 140,
+      clientY: 202,
+      pointerId: 13,
+    });
+
+    unmount();
+
+    fireTransitionEndEvent(track, "transform");
+
+    act(() => {
+      vi.advanceTimersByTime(380);
+    });
+
+    expect(onIndexChange).not.toHaveBeenCalled();
   });
 
   test("does not navigate after locking vertical intent without pointer capture APIs", () => {
