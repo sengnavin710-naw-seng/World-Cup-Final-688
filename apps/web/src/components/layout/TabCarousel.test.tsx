@@ -93,6 +93,12 @@ function firePointerEvent(
   fireEvent(viewport, event);
 }
 
+function fireTransitionEndEvent(target: HTMLElement, propertyName: string) {
+  const event = new Event("transitionend", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "propertyName", { value: propertyName });
+  fireEvent(target, event);
+}
+
 function swipeLeft(viewport: HTMLElement, pointerId: number) {
   firePointerEvent(viewport, "pointerdown", {
     clientX: 300,
@@ -156,9 +162,11 @@ describe("TabCarousel", () => {
   test("advances exactly one slide after a qualifying left gesture", () => {
     render(<Harness />);
     const viewport = screen.getByLabelText("Tournament tabs");
+    const track = screen.getByTestId("tab-carousel-track");
     setViewportWidth(viewport, 390);
 
     swipeLeft(viewport, 1);
+    fireTransitionEndEvent(track, "transform");
 
     expect(screen.getByText("Table content")).toBeInTheDocument();
     expect(screen.queryByText("News content")).not.toBeInTheDocument();
@@ -167,10 +175,13 @@ describe("TabCarousel", () => {
   test("stops at Table after two rapid qualifying gestures", () => {
     render(<Harness />);
     const viewport = screen.getByLabelText("Tournament tabs");
+    const track = screen.getByTestId("tab-carousel-track");
     setViewportWidth(viewport, 390);
 
     swipeLeft(viewport, 1);
+    fireTransitionEndEvent(track, "transform");
     swipeLeft(viewport, 2);
+    fireTransitionEndEvent(track, "transform");
 
     expect(screen.getByTestId("tab-slide-Table")).not.toHaveAttribute(
       "aria-hidden",
@@ -196,6 +207,7 @@ describe("TabCarousel", () => {
   test("observes only the active slide for viewport height", () => {
     render(<Harness />);
     const viewport = screen.getByLabelText("Tournament tabs");
+    const track = screen.getByTestId("tab-carousel-track");
     const knockoutSlide = screen.getByTestId("tab-slide-Knockout");
     const fixturesSlide = screen.getByTestId("tab-slide-Fixtures");
     const tableSlide = screen.getByTestId("tab-slide-Table");
@@ -209,6 +221,7 @@ describe("TabCarousel", () => {
 
     setViewportWidth(viewport, 390);
     swipeLeft(viewport, 1);
+    fireTransitionEndEvent(track, "transform");
 
     const fixturesObserver = findObserverFor(fixturesSlide);
 
