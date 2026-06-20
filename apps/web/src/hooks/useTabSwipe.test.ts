@@ -212,6 +212,50 @@ function fireTransitionEndEvent(
   fireEvent(target, event);
 }
 
+function setNonCapturingPointerApi(viewport: HTMLElement) {
+  Object.assign(viewport, {
+    hasPointerCapture: () => false,
+    releasePointerCapture: vi.fn(),
+    setPointerCapture: vi.fn(),
+  });
+}
+
+function swipeLeftAccepted(viewport: HTMLElement, pointerId: number) {
+  firePointerEvent(viewport, "pointerdown", {
+    clientX: 260,
+    clientY: 200,
+    pointerId,
+  });
+  firePointerEvent(viewport, "pointermove", {
+    clientX: 140,
+    clientY: 202,
+    pointerId,
+  });
+  firePointerEvent(viewport, "pointerup", {
+    clientX: 140,
+    clientY: 202,
+    pointerId,
+  });
+}
+
+function swipeLeftRejected(viewport: HTMLElement, pointerId: number) {
+  firePointerEvent(viewport, "pointerdown", {
+    clientX: 220,
+    clientY: 200,
+    pointerId,
+  });
+  firePointerEvent(viewport, "pointermove", {
+    clientX: 200,
+    clientY: 202,
+    pointerId,
+  });
+  firePointerEvent(viewport, "pointerup", {
+    clientX: 200,
+    clientY: 202,
+    pointerId,
+  });
+}
+
 class ControlledResizeObserver implements ResizeObserver {
   readonly observedTargets = new Set<Element>();
 
@@ -365,27 +409,9 @@ describe("useTabSwipe", () => {
     const viewport = screen.getByTestId("swipe-viewport");
     const track = screen.getByTestId("swipe-track");
 
-    Object.assign(viewport, {
-      hasPointerCapture: () => false,
-      releasePointerCapture: vi.fn(),
-      setPointerCapture: vi.fn(),
-    });
+    setNonCapturingPointerApi(viewport);
 
-    firePointerEvent(viewport, "pointerdown", {
-      clientX: 260,
-      clientY: 200,
-      pointerId: 6,
-    });
-    firePointerEvent(viewport, "pointermove", {
-      clientX: 140,
-      clientY: 202,
-      pointerId: 6,
-    });
-    firePointerEvent(viewport, "pointerup", {
-      clientX: 140,
-      clientY: 202,
-      pointerId: 6,
-    });
+    swipeLeftAccepted(viewport, 6);
 
     expect(onIndexChange).not.toHaveBeenCalled();
     expect(track.style.transform).toBe("translate3d(-780px, 0, 0)");
@@ -407,27 +433,9 @@ describe("useTabSwipe", () => {
     const viewport = screen.getByTestId("swipe-viewport");
     const track = screen.getByTestId("swipe-track");
 
-    Object.assign(viewport, {
-      hasPointerCapture: () => false,
-      releasePointerCapture: vi.fn(),
-      setPointerCapture: vi.fn(),
-    });
+    setNonCapturingPointerApi(viewport);
 
-    firePointerEvent(viewport, "pointerdown", {
-      clientX: 260,
-      clientY: 200,
-      pointerId: 6,
-    });
-    firePointerEvent(viewport, "pointermove", {
-      clientX: 140,
-      clientY: 202,
-      pointerId: 6,
-    });
-    firePointerEvent(viewport, "pointerup", {
-      clientX: 140,
-      clientY: 202,
-      pointerId: 6,
-    });
+    swipeLeftAccepted(viewport, 6);
 
     expect(onIndexChange).not.toHaveBeenCalled();
 
@@ -458,33 +466,46 @@ describe("useTabSwipe", () => {
     const viewport = screen.getByTestId("swipe-viewport");
     const track = screen.getByTestId("swipe-track");
 
-    Object.assign(viewport, {
-      hasPointerCapture: () => false,
-      releasePointerCapture: vi.fn(),
-      setPointerCapture: vi.fn(),
-    });
+    setNonCapturingPointerApi(viewport);
 
-    firePointerEvent(viewport, "pointerdown", {
-      clientX: 220,
-      clientY: 200,
-      pointerId: 7,
-    });
-    firePointerEvent(viewport, "pointermove", {
-      clientX: 200,
-      clientY: 202,
-      pointerId: 7,
-    });
-    firePointerEvent(viewport, "pointerup", {
-      clientX: 200,
-      clientY: 202,
-      pointerId: 7,
-    });
+    swipeLeftRejected(viewport, 7);
 
     expect(onIndexChange).not.toHaveBeenCalled();
     expect(track.style.transform).toBe("translate3d(-390px, 0, 0)");
     expect(track.style.transition).toBe(
       "transform 300ms cubic-bezier(0.4, 0, 0.2, 1)",
     );
+  });
+
+  test("keeps a rejected snap-back locked until it settles", () => {
+    vi.useFakeTimers();
+
+    const onIndexChange = vi.fn();
+    render(createElement(SettlingSwipeHarness, { onIndexChange }));
+    const viewport = screen.getByTestId("swipe-viewport");
+
+    setNonCapturingPointerApi(viewport);
+
+    swipeLeftRejected(viewport, 14);
+
+    const track = screen.getByTestId("swipe-track");
+
+    swipeLeftAccepted(viewport, 15);
+
+    expect(onIndexChange).not.toHaveBeenCalled();
+    expect(track.style.transform).toBe("translate3d(-390px, 0, 0)");
+
+    fireTransitionEndEvent(track, "transform");
+
+    swipeLeftAccepted(viewport, 16);
+
+    expect(track.style.transform).toBe("translate3d(-780px, 0, 0)");
+    expect(onIndexChange).not.toHaveBeenCalled();
+
+    fireTransitionEndEvent(track, "transform");
+
+    expect(onIndexChange).toHaveBeenCalledTimes(1);
+    expect(onIndexChange).toHaveBeenCalledWith(2);
   });
 
   test("commits immediately when reduced motion is enabled", () => {
@@ -500,27 +521,9 @@ describe("useTabSwipe", () => {
     const viewport = screen.getByTestId("swipe-viewport");
     const track = screen.getByTestId("swipe-track");
 
-    Object.assign(viewport, {
-      hasPointerCapture: () => false,
-      releasePointerCapture: vi.fn(),
-      setPointerCapture: vi.fn(),
-    });
+    setNonCapturingPointerApi(viewport);
 
-    firePointerEvent(viewport, "pointerdown", {
-      clientX: 260,
-      clientY: 200,
-      pointerId: 8,
-    });
-    firePointerEvent(viewport, "pointermove", {
-      clientX: 140,
-      clientY: 202,
-      pointerId: 8,
-    });
-    firePointerEvent(viewport, "pointerup", {
-      clientX: 140,
-      clientY: 202,
-      pointerId: 8,
-    });
+    swipeLeftAccepted(viewport, 8);
 
     expect(onIndexChange).toHaveBeenCalledTimes(1);
     expect(onIndexChange).toHaveBeenCalledWith(2);
@@ -541,27 +544,9 @@ describe("useTabSwipe", () => {
     const viewport = screen.getByTestId("swipe-viewport");
     const track = screen.getByTestId("swipe-track");
 
-    Object.assign(viewport, {
-      hasPointerCapture: () => false,
-      releasePointerCapture: vi.fn(),
-      setPointerCapture: vi.fn(),
-    });
+    setNonCapturingPointerApi(viewport);
 
-    firePointerEvent(viewport, "pointerdown", {
-      clientX: 260,
-      clientY: 200,
-      pointerId: 9,
-    });
-    firePointerEvent(viewport, "pointermove", {
-      clientX: 140,
-      clientY: 202,
-      pointerId: 9,
-    });
-    firePointerEvent(viewport, "pointerup", {
-      clientX: 140,
-      clientY: 202,
-      pointerId: 9,
-    });
+    swipeLeftAccepted(viewport, 9);
 
     fireTransitionEndEvent(track, "opacity");
     expect(onIndexChange).not.toHaveBeenCalled();
@@ -587,27 +572,9 @@ describe("useTabSwipe", () => {
     const viewport = screen.getByTestId("swipe-viewport");
     const track = screen.getByTestId("swipe-track");
 
-    Object.assign(viewport, {
-      hasPointerCapture: () => false,
-      releasePointerCapture: vi.fn(),
-      setPointerCapture: vi.fn(),
-    });
+    setNonCapturingPointerApi(viewport);
 
-    firePointerEvent(viewport, "pointerdown", {
-      clientX: 260,
-      clientY: 200,
-      pointerId: 10,
-    });
-    firePointerEvent(viewport, "pointermove", {
-      clientX: 140,
-      clientY: 202,
-      pointerId: 10,
-    });
-    firePointerEvent(viewport, "pointerup", {
-      clientX: 140,
-      clientY: 202,
-      pointerId: 10,
-    });
+    swipeLeftAccepted(viewport, 10);
 
     firePointerEvent(viewport, "pointerdown", {
       clientX: 140,
@@ -639,27 +606,9 @@ describe("useTabSwipe", () => {
     const viewport = screen.getByTestId("swipe-viewport");
     const track = screen.getByTestId("swipe-track");
 
-    Object.assign(viewport, {
-      hasPointerCapture: () => false,
-      releasePointerCapture: vi.fn(),
-      setPointerCapture: vi.fn(),
-    });
+    setNonCapturingPointerApi(viewport);
 
-    firePointerEvent(viewport, "pointerdown", {
-      clientX: 260,
-      clientY: 200,
-      pointerId: 12,
-    });
-    firePointerEvent(viewport, "pointermove", {
-      clientX: 140,
-      clientY: 202,
-      pointerId: 12,
-    });
-    firePointerEvent(viewport, "pointerup", {
-      clientX: 140,
-      clientY: 202,
-      pointerId: 12,
-    });
+    swipeLeftAccepted(viewport, 12);
 
     fireEvent.click(screen.getByRole("button", { name: "Jump to 3" }));
 
@@ -685,27 +634,9 @@ describe("useTabSwipe", () => {
     const viewport = screen.getByTestId("swipe-viewport");
     const track = screen.getByTestId("swipe-track");
 
-    Object.assign(viewport, {
-      hasPointerCapture: () => false,
-      releasePointerCapture: vi.fn(),
-      setPointerCapture: vi.fn(),
-    });
+    setNonCapturingPointerApi(viewport);
 
-    firePointerEvent(viewport, "pointerdown", {
-      clientX: 260,
-      clientY: 200,
-      pointerId: 13,
-    });
-    firePointerEvent(viewport, "pointermove", {
-      clientX: 140,
-      clientY: 202,
-      pointerId: 13,
-    });
-    firePointerEvent(viewport, "pointerup", {
-      clientX: 140,
-      clientY: 202,
-      pointerId: 13,
-    });
+    swipeLeftAccepted(viewport, 13);
 
     unmount();
 

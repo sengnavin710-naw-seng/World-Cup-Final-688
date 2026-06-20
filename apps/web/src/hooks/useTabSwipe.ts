@@ -89,6 +89,7 @@ export function useTabSwipe({
   const activeGestureRef = useRef<ActiveGesture | null>(null);
   const rafRef = useRef<number | null>(null);
   const pendingTargetIndexRef = useRef<number | null>(null);
+  const pendingShouldCommitRef = useRef(false);
   const pendingTransitionEndListenerRef = useRef<((event: TransitionEvent) => void) | null>(null);
   const pendingTransitionEndTargetRef = useRef<HTMLDivElement | null>(null);
   const pendingTimeoutRef = useRef<number | null>(null);
@@ -144,19 +145,23 @@ export function useTabSwipe({
     }
 
     pendingTargetIndexRef.current = null;
+    pendingShouldCommitRef.current = false;
     pendingTransitionEndTargetRef.current = null;
     pendingTransitionEndListenerRef.current = null;
   }, []);
 
   const completePendingSettle = useCallback(() => {
     const targetIndex = pendingTargetIndexRef.current;
+    const shouldCommit = pendingShouldCommitRef.current;
 
     if (targetIndex === null) {
       return;
     }
 
     clearPendingSettle();
-    onIndexChange(targetIndex);
+    if (shouldCommit) {
+      onIndexChange(targetIndex);
+    }
   }, [clearPendingSettle, onIndexChange]);
 
   const startTargetSettle = useCallback(
@@ -165,12 +170,40 @@ export function useTabSwipe({
 
       clearPendingSettle();
 
-      if (targetIndex === activeIndex) {
-        setTransform(targetIndex, 0, true);
+      if (reducedMotion) {
+        if (targetIndex !== activeIndex) {
+          onIndexChange(targetIndex);
+        }
         return;
       }
 
-      if (!track || reducedMotion) {
+      if (targetIndex === activeIndex) {
+        if (!track) {
+          return;
+        }
+
+        const handleTransitionEnd = (event: TransitionEvent) => {
+          if (event.target !== track || event.propertyName !== "transform") {
+            return;
+          }
+
+          completePendingSettle();
+        };
+
+        pendingTargetIndexRef.current = targetIndex;
+        pendingShouldCommitRef.current = false;
+        pendingTransitionEndTargetRef.current = track;
+        pendingTransitionEndListenerRef.current = handleTransitionEnd;
+
+        setTransform(targetIndex, 0, true);
+        track.addEventListener("transitionend", handleTransitionEnd);
+        pendingTimeoutRef.current = window.setTimeout(() => {
+          completePendingSettle();
+        }, SETTLE_FALLBACK_MS);
+        return;
+      }
+
+      if (!track) {
         onIndexChange(targetIndex);
         return;
       }
@@ -184,6 +217,7 @@ export function useTabSwipe({
       };
 
       pendingTargetIndexRef.current = targetIndex;
+      pendingShouldCommitRef.current = true;
       pendingTransitionEndTargetRef.current = track;
       pendingTransitionEndListenerRef.current = handleTransitionEnd;
 
