@@ -1,0 +1,266 @@
+import {
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
+
+const HORIZONTAL_INTENT_RATIO = 1.2;
+const DISTANCE_THRESHOLD_RATIO = 0.18;
+const MIN_VELOCITY_DISTANCE = 36;
+const VELOCITY_THRESHOLD = 0.55;
+const EDGE_RESISTANCE = 0.18;
+const SETTLE_TRANSITION = "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)";
+
+export interface SwipeDecisionInput {
+  activeIndex: number;
+  distanceX: number;
+  distanceY: number;
+  elapsedMs: number;
+  tabCount: number;
+  viewportWidth: number;
+}
+
+export function resolveSwipeDelta({
+  activeIndex,
+  distanceX,
+  distanceY,
+  elapsedMs,
+  tabCount,
+  viewportWidth,
+}: SwipeDecisionInput) {
+  const horizontalDistance = Math.abs(distanceX);
+
+  if (
+    tabCount <= 0 ||
+    horizontalDistance <= Math.abs(distanceY) * HORIZONTAL_INTENT_RATIO
+  ) {
+    return 0;
+  }
+
+  const velocity = horizontalDistance / Math.max(elapsedMs, 1);
+  const crossedDistance =
+    horizontalDistance >= Math.max(viewportWidth, 0) * DISTANCE_THRESHOLD_RATIO;
+  const crossedVelocity =
+    horizontalDistance >= MIN_VELOCITY_DISTANCE && velocity >= VELOCITY_THRESHOLD;
+
+  if (!crossedDistance && !crossedVelocity) {
+    return 0;
+  }
+
+  const direction = distanceX < 0 ? 1 : -1;
+  const nextIndex = Math.min(
+    Math.max(activeIndex + direction, 0),
+    tabCount - 1,
+  );
+
+  return nextIndex - activeIndex;
+}
+
+interface UseTabSwipeOptions {
+  activeIndex: number;
+  onIndexChange: (nextIndex: number) => void;
+  reducedMotion: boolean;
+  tabCount: number;
+}
+
+interface ActiveGesture {
+  intent: "horizontal" | "pending" | "vertical";
+  pointerId: number;
+  startTime: number;
+  startX: number;
+  startY: number;
+}
+
+export function useTabSwipe({
+  activeIndex,
+  onIndexChange,
+  reducedMotion,
+  tabCount,
+}: UseTabSwipeOptions) {
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const activeGestureRef = useRef<ActiveGesture | null>(null);
+  const rafRef = useRef<number | null>(null);
+
+  const cancelFrame = useCallback(() => {
+    if (rafRef.current !== null) {
+      window.cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+  }, []);
+
+  const setTransform = useCallback(
+    (index: number, dragOffset = 0, animated = false) => {
+      const viewport = viewportRef.current;
+      const track = trackRef.current;
+
+      if (!viewport || !track) {
+        return;
+      }
+
+      track.style.transition =
+        animated && !reducedMotion ? SETTLE_TRANSITION : "none";
+      track.style.transform = `translate3d(${
+        -index * viewport.clientWidth + dragOffset
+      }px, 0, 0)`;
+    },
+    [reducedMotion],
+  );
+
+  const settle = useCallback(
+    (animated = true) => {
+      cancelFrame();
+      setTransform(activeIndex, 0, animated);
+    },
+    [activeIndex, cancelFrame, setTransform],
+  );
+
+  useLayoutEffect(() => {
+    settle();
+  }, [activeIndex, reducedMotion, settle]);
+
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+
+    if (!viewport || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const observer = new ResizeObserver(() => {
+      settle(false);
+    });
+    observer.observe(viewport);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [settle]);
+
+  useLayoutEffect(
+    () => () => {
+      cancelFrame();
+    },
+    [cancelFrame],
+  );
+
+  const onPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (activeGestureRef.current) {
+        return;
+      }
+
+      activeGestureRef.current = {
+        intent: "pending",
+        pointerId: event.pointerId,
+        startTime: event.timeStamp,
+        startX: event.clientX,
+        startY: event.clientY,
+      };
+      event.currentTarget.setPointerCapture(event.pointerId);
+
+      if (trackRef.current) {
+        trackRef.current.style.transition = "none";
+      }
+    },
+    [],
+  );
+
+  const onPointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const gesture = activeGestureRef.current;
+
+      if (!gesture || gesture.pointerId !== event.pointerId) {
+        return;
+      }
+
+      const distanceX = event.clientX - gesture.startX;
+      const distanceY = event.clientY - gesture.startY;
+
+      if (gesture.intent === "pending") {
+        gesture.intent =
+          Math.abs(distanceX) > Math.abs(distanceY) * HORIZONTAL_INTENT_RATIO
+            ? "horizontal"
+            : "vertical";
+      }
+
+      if (gesture.intent === "vertical") {
+        return;
+      }
+
+      event.preventDefault();
+
+      const isPastFirstTab = activeIndex === 0 && distanceX > 0;
+      const isPastLastTab =
+        activeIndex === tabCount - 1 && distanceX < 0;
+      const dragOffset =
+        isPastFirstTab || isPastLastTab
+          ? distanceX * EDGE_RESISTANCE
+          : distanceX;
+
+      cancelFrame();
+      rafRef.current = window.requestAnimationFrame(() => {
+        rafRef.current = null;
+        setTransform(activeIndex, dragOffset);
+      });
+    },
+    [activeIndex, cancelFrame, setTransform, tabCount],
+  );
+
+  const onPointerUp = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const gesture = activeGestureRef.current;
+
+      if (!gesture || gesture.pointerId !== event.pointerId) {
+        return;
+      }
+
+      const delta = resolveSwipeDelta({
+        activeIndex,
+        distanceX: event.clientX - gesture.startX,
+        distanceY: event.clientY - gesture.startY,
+        elapsedMs: event.timeStamp - gesture.startTime,
+        tabCount,
+        viewportWidth: viewportRef.current?.clientWidth ?? 0,
+      });
+
+      activeGestureRef.current = null;
+      cancelFrame();
+
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+
+      if (delta === 0) {
+        settle();
+        return;
+      }
+
+      onIndexChange(activeIndex + delta);
+    },
+    [activeIndex, cancelFrame, onIndexChange, settle, tabCount],
+  );
+
+  const onPointerCancel = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const gesture = activeGestureRef.current;
+
+      if (!gesture || gesture.pointerId !== event.pointerId) {
+        return;
+      }
+
+      activeGestureRef.current = null;
+      settle();
+    },
+    [settle],
+  );
+
+  return {
+    onPointerCancel,
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
+    trackRef,
+    viewportRef,
+  };
+}
