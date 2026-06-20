@@ -171,6 +171,7 @@ export function useTabSwipe({
       clearPendingSettle();
 
       if (reducedMotion) {
+        setTransform(targetIndex, 0, false);
         if (targetIndex !== activeIndex) {
           onIndexChange(targetIndex);
         }

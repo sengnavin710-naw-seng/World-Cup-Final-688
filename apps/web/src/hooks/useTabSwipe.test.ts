@@ -212,6 +212,33 @@ function fireTransitionEndEvent(
   fireEvent(target, event);
 }
 
+function installAnimationFrameClock() {
+  let nextFrameId = 1;
+  const callbacks = new Map<number, FrameRequestCallback>();
+
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+    const frameId = nextFrameId;
+    nextFrameId += 1;
+    callbacks.set(frameId, callback);
+    return frameId;
+  });
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation((frameId) => {
+    callbacks.delete(frameId);
+  });
+
+  const advance = (timestamp: number) => {
+    const pendingCallbacks = [...callbacks.values()];
+    callbacks.clear();
+    act(() => {
+      pendingCallbacks.forEach((callback) => callback(timestamp));
+    });
+  };
+
+  return {
+    advance,
+  };
+}
+
 function setNonCapturingPointerApi(viewport: HTMLElement) {
   Object.assign(viewport, {
     hasPointerCapture: () => false,
@@ -250,6 +277,19 @@ function swipeLeftRejected(viewport: HTMLElement, pointerId: number) {
     pointerId,
   });
   firePointerEvent(viewport, "pointerup", {
+    clientX: 200,
+    clientY: 202,
+    pointerId,
+  });
+}
+
+function startRejectedSwipeDrag(viewport: HTMLElement, pointerId: number) {
+  firePointerEvent(viewport, "pointerdown", {
+    clientX: 220,
+    clientY: 200,
+    pointerId,
+  });
+  firePointerEvent(viewport, "pointermove", {
     clientX: 200,
     clientY: 202,
     pointerId,
@@ -309,6 +349,7 @@ function installControlledResizeObserver() {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -534,6 +575,36 @@ describe("useTabSwipe", () => {
     });
 
     expect(onIndexChange).toHaveBeenCalledTimes(1);
+  });
+
+  test("restores a rejected reduced-motion swipe after the drag frame renders", () => {
+    const onIndexChange = vi.fn();
+    render(
+      createElement(SettlingSwipeHarness, {
+        onIndexChange,
+        reducedMotion: true,
+      }),
+    );
+    const viewport = screen.getByTestId("swipe-viewport");
+    const track = screen.getByTestId("swipe-track");
+    const frameClock = installAnimationFrameClock();
+
+    setNonCapturingPointerApi(viewport);
+
+    startRejectedSwipeDrag(viewport, 17);
+
+    frameClock.advance(16);
+
+    expect(track.style.transform).toBe("translate3d(-410px, 0, 0)");
+
+    firePointerEvent(viewport, "pointerup", {
+      clientX: 200,
+      clientY: 202,
+      pointerId: 17,
+    });
+
+    expect(track.style.transform).toBe("translate3d(-390px, 0, 0)");
+    expect(onIndexChange).not.toHaveBeenCalled();
   });
 
   test("ignores non-transform transition end events", () => {
