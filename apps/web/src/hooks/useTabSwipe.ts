@@ -85,6 +85,7 @@ export function useTabSwipe({
   const trackRef = useRef<HTMLDivElement>(null);
   const activeGestureRef = useRef<ActiveGesture | null>(null);
   const rafRef = useRef<number | null>(null);
+  const observedViewportWidthRef = useRef<number | null>(null);
 
   const cancelFrame = useCallback(() => {
     if (rafRef.current !== null) {
@@ -130,12 +131,22 @@ export function useTabSwipe({
       return;
     }
 
+    observedViewportWidthRef.current = viewport.clientWidth;
+
     const observer = new ResizeObserver(() => {
+      const nextWidth = viewport.clientWidth;
+
+      if (nextWidth === observedViewportWidthRef.current) {
+        return;
+      }
+
+      observedViewportWidthRef.current = nextWidth;
       settle(false);
     });
     observer.observe(viewport);
 
     return () => {
+      observedViewportWidthRef.current = null;
       observer.disconnect();
     };
   }, [settle]);

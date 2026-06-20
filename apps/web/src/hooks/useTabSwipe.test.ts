@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { createElement } from "react";
-import { describe, expect, test, vi } from "vitest";
+import { createElement, useState, type MutableRefObject } from "react";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { resolveSwipeDelta, useTabSwipe } from "./useTabSwipe";
 
 function SwipeHarness({
@@ -29,6 +29,47 @@ function SwipeHarness({
   );
 }
 
+function NormalMotionSwipeHarness() {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const swipe = useTabSwipe({
+    activeIndex,
+    onIndexChange: setActiveIndex,
+    reducedMotion: false,
+    tabCount: 4,
+  });
+
+  const setViewportRef = (node: HTMLDivElement | null) => {
+    if (node) {
+      setViewportWidth(node, 390);
+    }
+
+    (
+      swipe.viewportRef as MutableRefObject<HTMLDivElement | null>
+    ).current = node;
+  };
+
+  return createElement(
+    "div",
+    {
+      "data-testid": "swipe-viewport",
+      ref: setViewportRef,
+    },
+    createElement("div", {
+      "data-testid": "swipe-track",
+      ref: swipe.trackRef,
+    }),
+    createElement(
+      "button",
+      {
+        onClick: () => {
+          setActiveIndex(1);
+        },
+      },
+      "Next",
+    ),
+  );
+}
+
 function setViewportWidth(viewport: HTMLElement, width: number) {
   Object.defineProperty(viewport, "clientWidth", {
     configurable: true,
@@ -49,6 +90,61 @@ function firePointerEvent(
   });
   fireEvent(viewport, event);
 }
+
+class ControlledResizeObserver implements ResizeObserver {
+  readonly observedTargets = new Set<Element>();
+
+  constructor(private readonly callback: ResizeObserverCallback) {
+    controlledResizeObservers.push(this);
+  }
+
+  disconnect = vi.fn(() => {
+    this.observedTargets.clear();
+  });
+
+  observe = vi.fn((target: Element) => {
+    this.observedTargets.add(target);
+  });
+
+  unobserve = vi.fn((target: Element) => {
+    this.observedTargets.delete(target);
+  });
+
+  trigger({
+    height,
+    target,
+    width,
+  }: {
+    height: number;
+    target: Element;
+    width: number;
+  }) {
+    if (!this.observedTargets.has(target)) {
+      return;
+    }
+
+    this.callback(
+      [
+        {
+          contentRect: { height, width } as DOMRectReadOnly,
+          target,
+        } as ResizeObserverEntry,
+      ],
+      this,
+    );
+  }
+}
+
+let controlledResizeObservers: ControlledResizeObserver[] = [];
+
+function installControlledResizeObserver() {
+  controlledResizeObservers = [];
+  vi.stubGlobal("ResizeObserver", ControlledResizeObserver);
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("resolveSwipeDelta", () => {
   test("moves one tab after a long fast left swipe", () => {
@@ -225,5 +321,29 @@ describe("useTabSwipe", () => {
     });
 
     expect(onIndexChange).toHaveBeenCalledWith(2);
+  });
+
+  test("keeps the settle transition after a height-only viewport resize", () => {
+    installControlledResizeObserver();
+    render(createElement(NormalMotionSwipeHarness));
+    const viewport = screen.getByTestId("swipe-viewport");
+    const track = screen.getByTestId("swipe-track");
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    const viewportObserver = [...controlledResizeObservers]
+      .reverse()
+      .find((observer) => observer.observedTargets.has(viewport));
+
+    expect(viewportObserver).toBeDefined();
+    expect(track.style.transition).toContain("transform 180ms");
+
+    viewportObserver?.trigger({
+      height: 720,
+      target: viewport,
+      width: 390,
+    });
+
+    expect(track.style.transition).toContain("transform 180ms");
   });
 });

@@ -1,11 +1,52 @@
 import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { HomeTab } from "../../lib/tournamentQueries";
 import { TabCarousel } from "./TabCarousel";
 
 const tabs = ["Knockout", "Fixtures", "Table", "News"] as const;
+const defaultSlideHeights = {
+  "tab-slide-Fixtures": 640,
+  "tab-slide-Knockout": 480,
+  "tab-slide-News": 560,
+  "tab-slide-Table": 920,
+} as const;
+
+class ControlledResizeObserver implements ResizeObserver {
+  readonly observedTargets = new Set<Element>();
+
+  constructor(private readonly callback: ResizeObserverCallback) {
+    controlledResizeObservers.push(this);
+  }
+
+  disconnect = vi.fn(() => {
+    this.observedTargets.clear();
+  });
+
+  observe = vi.fn((target: Element) => {
+    this.observedTargets.add(target);
+  });
+
+  unobserve = vi.fn((target: Element) => {
+    this.observedTargets.delete(target);
+  });
+
+  trigger(target: Element) {
+    if (!this.observedTargets.has(target)) {
+      return;
+    }
+
+    this.callback([{ target } as ResizeObserverEntry], this);
+  }
+}
+
+let controlledResizeObservers: ControlledResizeObserver[] = [];
+let slideHeights = new Map<string, number>();
+const originalScrollHeightDescriptor = Object.getOwnPropertyDescriptor(
+  HTMLElement.prototype,
+  "scrollHeight",
+);
 
 function Harness({ reducedMotion = false }: { reducedMotion?: boolean }) {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -26,6 +67,16 @@ function setViewportWidth(viewport: HTMLElement, width: number) {
     configurable: true,
     value: width,
   });
+}
+
+function setSlideHeight(tab: (typeof tabs)[number], height: number) {
+  slideHeights.set(`tab-slide-${tab}`, height);
+}
+
+function findObserverFor(target: Element) {
+  return controlledResizeObservers.find((observer) =>
+    observer.observedTargets.has(target),
+  );
 }
 
 function firePointerEvent(
@@ -61,22 +112,35 @@ function swipeLeft(viewport: HTMLElement, pointerId: number) {
 }
 
 beforeEach(() => {
-  class ResizeObserverStub implements ResizeObserver {
-    constructor(private readonly callback: ResizeObserverCallback) {}
+  controlledResizeObservers = [];
+  slideHeights = new Map(Object.entries(defaultSlideHeights));
+  Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+    configurable: true,
+    get() {
+      const testId = this.getAttribute("data-testid");
 
-    disconnect = vi.fn();
-    unobserve = vi.fn();
+      if (testId && slideHeights.has(testId)) {
+        return slideHeights.get(testId);
+      }
 
-    observe = vi.fn((target: Element) => {
-      Object.defineProperty(target, "scrollHeight", {
-        configurable: true,
-        value: 480,
-      });
-      this.callback([{ target } as ResizeObserverEntry], this);
-    });
+      return originalScrollHeightDescriptor?.get?.call(this) ?? 0;
+    },
+  });
+  vi.stubGlobal("ResizeObserver", ControlledResizeObserver);
+});
+
+afterEach(() => {
+  if (originalScrollHeightDescriptor) {
+    Object.defineProperty(
+      HTMLElement.prototype,
+      "scrollHeight",
+      originalScrollHeightDescriptor,
+    );
+  } else {
+    Reflect.deleteProperty(HTMLElement.prototype, "scrollHeight");
   }
 
-  vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+  vi.unstubAllGlobals();
 });
 
 describe("TabCarousel", () => {
@@ -129,11 +193,44 @@ describe("TabCarousel", () => {
     expect(activeSlide).not.toHaveAttribute("inert");
   });
 
-  test("sets the viewport height from the active slide", () => {
+  test("observes only the active slide for viewport height", () => {
     render(<Harness />);
+    const viewport = screen.getByLabelText("Tournament tabs");
+    const knockoutSlide = screen.getByTestId("tab-slide-Knockout");
+    const fixturesSlide = screen.getByTestId("tab-slide-Fixtures");
+    const tableSlide = screen.getByTestId("tab-slide-Table");
+    const knockoutObserver = findObserverFor(knockoutSlide);
 
-    expect(screen.getByLabelText("Tournament tabs")).toHaveStyle({
+    expect(viewport).toHaveStyle({
       height: "480px",
+    });
+    expect(knockoutObserver).toBeDefined();
+    expect(findObserverFor(fixturesSlide)).toBeUndefined();
+
+    setViewportWidth(viewport, 390);
+    swipeLeft(viewport, 1);
+
+    const fixturesObserver = findObserverFor(fixturesSlide);
+
+    expect(knockoutObserver?.disconnect).toHaveBeenCalledTimes(1);
+    expect(fixturesObserver).toBeDefined();
+    expect(findObserverFor(tableSlide)).toBeUndefined();
+    expect(viewport).toHaveStyle({
+      height: "640px",
+    });
+
+    setSlideHeight("Fixtures", 700);
+    fixturesObserver?.trigger(fixturesSlide);
+
+    expect(viewport).toHaveStyle({
+      height: "700px",
+    });
+
+    setSlideHeight("Knockout", 999);
+    knockoutObserver?.trigger(knockoutSlide);
+
+    expect(viewport).toHaveStyle({
+      height: "700px",
     });
   });
 
