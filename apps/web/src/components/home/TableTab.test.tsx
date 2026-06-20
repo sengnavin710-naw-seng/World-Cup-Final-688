@@ -91,7 +91,7 @@ test("keeps full table team names readable at small and large widths", () => {
   );
 });
 
-test("keeps horizontal table gestures from reaching the tab swipe handler", () => {
+test("lets short table gestures bubble to the tab swipe handler", () => {
   const handleParentTouchStart = vi.fn();
   const handleParentTouchEnd = vi.fn();
   const { container } = render(
@@ -100,7 +100,7 @@ test("keeps horizontal table gestures from reaching the tab swipe handler", () =
         companyPicks={[]}
         scopeMode="Overall"
         standings={standings}
-        tableMode="Full"
+        tableMode="Short"
       />
     </div>,
   );
@@ -111,6 +111,6 @@ test("keeps horizontal table gestures from reaching the tab swipe handler", () =
   fireEvent.touchStart(tableScroll!);
   fireEvent.touchEnd(tableScroll!);
 
-  expect(handleParentTouchStart).not.toHaveBeenCalled();
-  expect(handleParentTouchEnd).not.toHaveBeenCalled();
+  expect(handleParentTouchStart).toHaveBeenCalledTimes(1);
+  expect(handleParentTouchEnd).toHaveBeenCalledTimes(1);
 });

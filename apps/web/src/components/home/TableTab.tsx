@@ -47,8 +47,6 @@ export function TableTab({ companyPicks, scopeMode, standings, tableMode }: Tabl
             <div
               aria-label={tableMode === "Full" ? `Full standings for Group ${group.group}` : undefined}
               className="group-table-scroll"
-              onTouchEnd={(event) => event.stopPropagation()}
-              onTouchStart={(event) => event.stopPropagation()}
               tabIndex={tableMode === "Full" ? 0 : undefined}
             >
               <div className={`group-table-content${tableMode === "Full" ? " table-mode-full" : ""}`}>

@@ -1,47 +1,41 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { Bell, MoreHorizontal } from "lucide-react";
 import {
-  type TouchEvent,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+import { useHomeTabQueries } from "../../hooks/useHomeTabQueries";
 import {
-  fetchFixtures,
-  fetchKnockout,
-  fetchNews,
-  fetchStandings,
-  fetchTeams,
-} from "../../lib/api";
-import type {
-  CompanyPick,
-  Fixture,
-  GroupStanding,
-  KnockoutRound,
-  NewsItem,
-  ParticipantSession,
-  Team,
-} from "../../lib/types";
+  homeTabs,
+  prefetchTabData,
+  type HomeTab,
+} from "../../lib/tournamentQueries";
+import type { ParticipantSession } from "../../lib/types";
 import {
   FixtureFilters,
-  FixturesTab,
   type FixtureFilter,
-} from "../home/FixturesTab";
-import { KnockoutTab } from "../home/KnockoutTab";
-import { NewsTab } from "../home/NewsTab";
-import { TableTab } from "../home/TableTab";
-import { ConfirmDialog } from "../ui/ConfirmDialog";
+} from "../home/FixtureFilters";
 import { BrandHeader } from "../ui/BrandHeader";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { NotificationPanel } from "../ui/NotificationPanel";
+import { TabCarousel } from "./TabCarousel";
+import { TabErrorBoundary } from "./TabErrorBoundary";
+import { TabLoadState, TabRefreshNotice } from "./TabLoadState";
+import {
+  LazyFixturesTab,
+  LazyKnockoutTab,
+  LazyNewsTab,
+  LazyTableTab,
+  preloadTabModule,
+} from "./tabModules";
 
-const tabs = ["Knockout", "Fixtures", "Table", "News"] as const;
+const tabs = homeTabs;
 const tableModes = ["Short", "Full"] as const;
 const scopeModes = ["Overall", "Home", "Away"] as const;
-
-type TabName = (typeof tabs)[number];
-type TransitionDirection = "forward" | "backward";
-type TabScreenLayer = "active" | "incoming" | "outgoing";
 
 type AppShellProps = {
   brandName: string;
@@ -56,16 +50,15 @@ export function AppShell({
   onResetDevice,
   participant,
 }: AppShellProps) {
-  const swipeStart = useRef<{ x: number; y: number } | null>(null);
-  const transitionTimerRef = useRef<number | null>(null);
-  const [activeTab, setActiveTab] = useState<TabName>("Knockout");
-  const [outgoingTab, setOutgoingTab] = useState<TabName | null>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const activeTab = tabs[activeIndex] ?? tabs[0];
+  const queryClient = useQueryClient();
+  const queries = useHomeTabQueries(activeIndex);
   const [fixtureFilter, setFixtureFilter] = useState<FixtureFilter>("Date");
   const [fixtureGroupOverride, setFixtureGroupOverride] = useState("");
   const [tableMode, setTableMode] = useState<(typeof tableModes)[number]>("Short");
-  const [scopeMode, setScopeMode] = useState<(typeof scopeModes)[number]>("Overall");
-  const [transitionDirection, setTransitionDirection] =
-    useState<TransitionDirection>("forward");
+  const [scopeMode, setScopeMode] =
+    useState<(typeof scopeModes)[number]>("Overall");
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(
     () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
   );
@@ -73,48 +66,67 @@ export function AppShell({
   const [showNotifications, setShowNotifications] = useState(false);
   const [showChangeConfirm, setShowChangeConfirm] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [knockout, setKnockout] = useState<KnockoutRound[]>([]);
-  const [fixtures, setFixtures] = useState<Fixture[]>([]);
-  const [standings, setStandings] = useState<GroupStanding[]>([]);
-  const [companyPicks, setCompanyPicks] = useState<CompanyPick[]>([]);
-  const [news, setNews] = useState<NewsItem[]>([]);
-  const [homeStatus, setHomeStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [homeError, setHomeError] = useState("");
   const [resetError, setResetError] = useState("");
   const [resetting, setResetting] = useState(false);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
-  const loadHomeData = useCallback(() => {
-    setHomeStatus("loading");
-    setHomeError("");
+  const selectedTeam = useMemo(
+    () =>
+      queries.teams.data?.find((team) => team.code === participant.teamCode) ??
+      null,
+    [participant.teamCode, queries.teams.data],
+  );
+  const participantFixtureGroup = useMemo(
+    () =>
+      queries.fixtures.data?.find(
+        (fixture) =>
+          fixture.homeTeam === participant.teamCode ||
+          fixture.awayTeam === participant.teamCode,
+      )?.group ??
+      queries.fixtures.data?.[0]?.group ??
+      "A",
+    [participant.teamCode, queries.fixtures.data],
+  );
+  const selectedFixtureGroup = fixtureGroupOverride || participantFixtureGroup;
 
-    void fetchTeams()
-      .then((teamsData) => {
-        setTeams(teamsData.teams);
-      })
-      .catch(() => {
-        setTeams([]);
-      });
-
-    void Promise.all([fetchKnockout(), fetchFixtures(), fetchStandings(), fetchNews()])
-      .then(([knockoutData, fixturesData, tableData, newsData]) => {
-        setKnockout(knockoutData.knockout);
-        setFixtures(fixturesData.fixtures);
-        setStandings(tableData.standings);
-        setCompanyPicks(tableData.companyPicks);
-        setNews(newsData.news);
-        setHomeStatus("ready");
-      })
-      .catch(() => {
-        setHomeStatus("error");
-        setHomeError("Unable to load the latest tournament dashboard right now.");
-      });
-  }, []);
+  const prefetchTab = useCallback(
+    (tab: HomeTab) => {
+      void Promise.all([
+        preloadTabModule(tab),
+        prefetchTabData(queryClient, tab),
+      ]).catch(() => undefined);
+    },
+    [queryClient],
+  );
 
   useEffect(() => {
-    loadHomeData();
-  }, [loadHomeData]);
+    const neighbors = [tabs[activeIndex - 1], tabs[activeIndex + 1]].filter(
+      (tab): tab is HomeTab => Boolean(tab),
+    );
+
+    neighbors.forEach(prefetchTab);
+  }, [activeIndex, prefetchTab]);
+
+  useEffect(() => {
+    const preloadRemaining = () => tabs.forEach(prefetchTab);
+    const idleWindow = window as Window & {
+      cancelIdleCallback?: (id: number) => void;
+      requestIdleCallback?: (
+        callback: () => void,
+        options?: { timeout: number },
+      ) => number;
+    };
+
+    if (idleWindow.requestIdleCallback && idleWindow.cancelIdleCallback) {
+      const id = idleWindow.requestIdleCallback(preloadRemaining, {
+        timeout: 1500,
+      });
+      return () => idleWindow.cancelIdleCallback?.(id);
+    }
+
+    const id = window.setTimeout(preloadRemaining, 700);
+    return () => window.clearTimeout(id);
+  }, [prefetchTab]);
 
   useEffect(() => {
     if (typeof window.matchMedia !== "function") {
@@ -128,151 +140,134 @@ export function AppShell({
     return () => query.removeEventListener("change", updatePreference);
   }, []);
 
-  useEffect(
-    () => () => {
-      if (transitionTimerRef.current !== null) {
-        window.clearTimeout(transitionTimerRef.current);
-      }
-    },
-    [],
-  );
-
-  const selectedTeam = useMemo(
-    () => teams.find((team) => team.code === participant.teamCode) ?? null,
-    [participant.teamCode, teams],
-  );
-  const participantFixtureGroup = useMemo(
-    () =>
-      fixtures.find(
-        (fixture) =>
-          fixture.homeTeam === participant.teamCode ||
-          fixture.awayTeam === participant.teamCode,
-      )?.group ??
-      fixtures[0]?.group ??
-      "A",
-    [fixtures, participant.teamCode],
-  );
-  const selectedFixtureGroup = fixtureGroupOverride || participantFixtureGroup;
-
   useEffect(() => {
-    const activeButton = tabRefs.current[tabs.indexOf(activeTab)];
+    const activeButton = tabRefs.current[activeIndex];
+
     if (activeButton && typeof activeButton.scrollIntoView === "function") {
       activeButton.scrollIntoView({
-        behavior: "smooth",
+        behavior: "auto",
         inline: "center",
         block: "nearest",
       });
     }
-  }, [activeTab]);
+  }, [activeIndex]);
 
-  const completeTabTransition = useCallback(() => {
-    setOutgoingTab(null);
-    if (transitionTimerRef.current !== null) {
-      window.clearTimeout(transitionTimerRef.current);
-      transitionTimerRef.current = null;
-    }
-  }, []);
-
-  const handleTabChange = (nextTab: TabName) => {
-    if (nextTab === activeTab || outgoingTab !== null) {
-      return;
-    }
-
-    const currentIndex = tabs.indexOf(activeTab);
-    const nextIndex = tabs.indexOf(nextTab);
-    setTransitionDirection(nextIndex > currentIndex ? "forward" : "backward");
-
-    if (prefersReducedMotion) {
-      setActiveTab(nextTab);
-      return;
-    }
-
-    setOutgoingTab(activeTab);
-    setActiveTab(nextTab);
-    transitionTimerRef.current = window.setTimeout(completeTabTransition, 360);
-  };
-
-  const handleSwipeToTab = (direction: "left" | "right") => {
-    const currentIndex = tabs.indexOf(activeTab);
-    const nextIndex =
-      direction === "left"
-        ? Math.min(currentIndex + 1, tabs.length - 1)
-        : Math.max(currentIndex - 1, 0);
-
-    if (nextIndex !== currentIndex) {
-      handleTabChange(tabs[nextIndex]);
-    }
-  };
-
-  const handleTabTouchStart = (event: TouchEvent<HTMLElement>) => {
-    const touch = event.changedTouches[0];
-    swipeStart.current = touch
-      ? { x: touch.clientX, y: touch.clientY }
-      : null;
-  };
-
-  const handleTabTouchEnd = (event: TouchEvent<HTMLElement>) => {
-    const start = swipeStart.current;
-    const touch = event.changedTouches[0];
-    swipeStart.current = null;
-
-    if (!start || !touch) {
-      return;
-    }
-
-    const horizontalDistance = touch.clientX - start.x;
-    const verticalDistance = touch.clientY - start.y;
-    const threshold = 48;
-
-    if (
-      Math.abs(horizontalDistance) < threshold ||
-      Math.abs(horizontalDistance) <= Math.abs(verticalDistance)
-    ) {
-      return;
-    }
-
-    handleSwipeToTab(horizontalDistance < 0 ? "left" : "right");
-  };
-
-  const renderTabContent = (tab: TabName) => {
+  const renderTabContent = (tab: HomeTab) => {
     if (tab === "Knockout") {
+      if (!queries.knockout.data) {
+        return (
+          <TabLoadState
+            label="Knockout"
+            state={queries.knockout.isError ? "error" : "loading"}
+            onRetry={() => void queries.knockout.refetch()}
+          />
+        );
+      }
+
       return (
-        <KnockoutTab
-          onFastForwardSwipe={() => handleTabChange("Fixtures")}
-          rounds={knockout}
-          teams={teams}
-        />
+        <>
+          {queries.knockout.isError || queries.teams.isError ? (
+            <TabRefreshNotice
+              onRetry={() => {
+                void queries.knockout.refetch();
+                void queries.teams.refetch();
+              }}
+            />
+          ) : null}
+          <LazyKnockoutTab
+            onFastForwardSwipe={() => setActiveIndex(1)}
+            rounds={queries.knockout.data}
+            teams={queries.teams.data ?? []}
+          />
+        </>
       );
     }
 
     if (tab === "Fixtures") {
+      if (!queries.fixtures.data) {
+        return (
+          <TabLoadState
+            label="Fixtures"
+            state={queries.fixtures.isError ? "error" : "loading"}
+            onRetry={() => void queries.fixtures.refetch()}
+          />
+        );
+      }
+
       return (
-        <FixturesTab
-          activeFilter={fixtureFilter}
-          companyPicks={companyPicks}
-          fixtures={fixtures}
-          participantTeamCode={participant.teamCode}
-          selectedGroup={selectedFixtureGroup}
-          showFilters={false}
-        />
+        <>
+          {queries.fixtures.isError || queries.table.isError ? (
+            <TabRefreshNotice
+              onRetry={() => {
+                void queries.fixtures.refetch();
+                void queries.table.refetch();
+              }}
+            />
+          ) : null}
+          <LazyFixturesTab
+            activeFilter={fixtureFilter}
+            companyPicks={queries.table.data?.companyPicks ?? []}
+            fixtures={queries.fixtures.data}
+            participantTeamCode={participant.teamCode}
+            selectedGroup={selectedFixtureGroup}
+            showFilters={false}
+          />
+        </>
       );
     }
 
     if (tab === "Table") {
+      if (!queries.table.data) {
+        return (
+          <TabLoadState
+            label="Table"
+            state={queries.table.isError ? "error" : "loading"}
+            onRetry={() => void queries.table.refetch()}
+          />
+        );
+      }
+
       return (
-        <TableTab
-          companyPicks={companyPicks}
-          scopeMode={scopeMode}
-          standings={standings}
-          tableMode={tableMode}
+        <>
+          {queries.table.isError ? (
+            <TabRefreshNotice onRetry={() => void queries.table.refetch()} />
+          ) : null}
+          <LazyTableTab
+            companyPicks={queries.table.data.companyPicks}
+            scopeMode={scopeMode}
+            standings={queries.table.data.standings}
+            tableMode={tableMode}
+          />
+        </>
+      );
+    }
+
+    if (!queries.news.data) {
+      return (
+        <TabLoadState
+          label="News"
+          state={queries.news.isError ? "error" : "loading"}
+          onRetry={() => void queries.news.refetch()}
         />
       );
     }
 
-    return <NewsTab news={news} selectedTeam={selectedTeam} />;
+    return (
+      <>
+        {queries.news.isError || queries.teams.isError ? (
+          <TabRefreshNotice
+            onRetry={() => {
+              void queries.news.refetch();
+              void queries.teams.refetch();
+            }}
+          />
+        ) : null}
+        <LazyNewsTab news={queries.news.data} selectedTeam={selectedTeam} />
+      </>
+    );
   };
 
-  const renderTabToolbar = (tab: TabName) => {
+  const renderTabToolbar = (tab: HomeTab) => {
     if (tab === "Fixtures") {
       return (
         <section className="fixture-shell-toolbar">
@@ -289,7 +284,11 @@ export function AppShell({
     if (tab === "Table") {
       return (
         <section className="table-shell-toolbar">
-          <div className="table-toggle-group" role="tablist" aria-label="Table detail mode">
+          <div
+            aria-label="Table detail mode"
+            className="table-toggle-group"
+            role="tablist"
+          >
             {tableModes.map((mode) => (
               <button
                 key={mode}
@@ -309,7 +308,9 @@ export function AppShell({
             <select
               className="scope-select"
               value={scopeMode}
-              onChange={(event) => setScopeMode(event.target.value as (typeof scopeModes)[number])}
+              onChange={(event) =>
+                setScopeMode(event.target.value as (typeof scopeModes)[number])
+              }
             >
               {scopeModes.map((mode) => (
                 <option key={mode} value={mode}>
@@ -325,67 +326,21 @@ export function AppShell({
     return null;
   };
 
-  const renderTabPanel = (tab: TabName) => (
+  const renderTabPanel = (tab: HomeTab) => (
     <section
       className={[
         "tab-panel",
         tab === "Knockout" ? "tab-panel-knockout" : "",
         tab === "Fixtures" ? "tab-panel-fixtures" : "",
-      ].filter(Boolean).join(" ")}
+        tab === "Table" ? "tab-panel-table" : "",
+        tab === "News" ? "tab-panel-news" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
       {renderTabContent(tab)}
     </section>
   );
-
-  const renderTabScreen = (tab: TabName, layer: TabScreenLayer) => {
-    const isOutgoing = layer === "outgoing";
-    const isIncoming = layer === "incoming";
-    const directionClass = isOutgoing
-      ? transitionDirection === "forward"
-        ? "tab-screen-exit-left"
-        : "tab-screen-exit-right"
-      : isIncoming
-        ? transitionDirection === "forward"
-          ? "tab-screen-enter-right"
-          : "tab-screen-enter-left"
-        : "";
-
-    return (
-      <div
-        key={`${layer}-${tab}`}
-        aria-hidden={isOutgoing ? "true" : undefined}
-        className={[
-          "tab-screen",
-          isOutgoing ? "tab-screen-outgoing" : "",
-          isIncoming ? "tab-screen-incoming" : "",
-          directionClass,
-        ].filter(Boolean).join(" ")}
-        data-tab-screen={tab}
-        inert={isOutgoing ? true : undefined}
-        onTouchStart={isOutgoing ? undefined : handleTabTouchStart}
-        onTouchEnd={isOutgoing ? undefined : handleTabTouchEnd}
-        onTouchCancel={
-          isOutgoing
-            ? undefined
-            : () => {
-                swipeStart.current = null;
-              }
-        }
-        onAnimationEnd={
-          isIncoming
-            ? (event) => {
-                if (event.currentTarget === event.target) {
-                  completeTabTransition();
-                }
-              }
-            : undefined
-        }
-      >
-        {renderTabToolbar(tab)}
-        {renderTabPanel(tab)}
-      </div>
-    );
-  };
 
   return (
     <main className="app-shell">
@@ -421,7 +376,9 @@ export function AppShell({
                 <div className="menu-panel">
                   <div className="menu-panel-label">Selected Team</div>
                   <div className="menu-panel-value">
-                    <span aria-hidden="true">{selectedTeam?.flag ?? "🏳️"}</span>
+                    {selectedTeam?.flag ? (
+                      <span aria-hidden="true">{selectedTeam.flag}</span>
+                    ) : null}
                     <span>{selectedTeam?.name ?? "Unknown Team"}</span>
                   </div>
                   <button
@@ -458,7 +415,9 @@ export function AppShell({
                 className="tab-button"
                 role="tab"
                 type="button"
-                onClick={() => handleTabChange(tab)}
+                onClick={() => setActiveIndex(index)}
+                onFocus={() => prefetchTab(tab)}
+                onPointerDown={() => prefetchTab(tab)}
               >
                 {tab}
               </button>
@@ -466,33 +425,22 @@ export function AppShell({
           </nav>
         </section>
 
-        {homeStatus === "loading" ? (
-          <section className="tab-panel state-card">
-            <span className="summary-label">Dashboard</span>
-            <strong>Loading the latest tournament dashboard...</strong>
-            <p className="state-copy">We are fetching knockout, fixtures, standings, and news for your current session.</p>
-          </section>
-        ) : null}
-        {homeStatus === "error" ? (
-          <section className="tab-panel state-card">
-            <span className="summary-label">Dashboard</span>
-            <strong>Unable to load the latest dashboard.</strong>
-            <p className="state-copy">{homeError}</p>
-            <div className="inline-actions">
-              <button className="primary-button" type="button" onClick={loadHomeData}>
-                Retry
-              </button>
-            </div>
-          </section>
-        ) : null}
-        {homeStatus === "ready" ? (
-          <div className="tab-transition-viewport">
-            <div className="tab-transition-stage">
-              {outgoingTab ? renderTabScreen(outgoingTab, "outgoing") : null}
-              {renderTabScreen(activeTab, outgoingTab ? "incoming" : "active")}
-            </div>
-          </div>
-        ) : null}
+        <TabCarousel
+          activeIndex={activeIndex}
+          onActiveIndexChange={setActiveIndex}
+          reducedMotion={prefersReducedMotion}
+          renderTab={(tab) => (
+            <>
+              {renderTabToolbar(tab)}
+              <TabErrorBoundary label={tab} resetKey={tab}>
+                <Suspense fallback={<TabLoadState label={tab} state="loading" />}>
+                  {renderTabPanel(tab)}
+                </Suspense>
+              </TabErrorBoundary>
+            </>
+          )}
+          tabs={tabs}
+        />
       </div>
 
       <ConfirmDialog

@@ -20,6 +20,10 @@ export type KnockoutRound = {
     id: string;
     homeTeam: string;
     awayTeam: string;
+    homeTeamConfirmed?: boolean;
+    awayTeamConfirmed?: boolean;
+    homeTeamPlaceholder?: string;
+    awayTeamPlaceholder?: string;
     homeScore: number;
     awayScore: number;
     kickoff: string;
