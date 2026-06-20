@@ -23,6 +23,7 @@ import { BrandHeader } from "../ui/BrandHeader";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { NotificationPanel } from "../ui/NotificationPanel";
 import { TabCarousel } from "./TabCarousel";
+import { TabErrorBoundary } from "./TabErrorBoundary";
 import { TabLoadState, TabRefreshNotice } from "./TabLoadState";
 import {
   LazyFixturesTab,
@@ -429,9 +430,11 @@ export function AppShell({
           renderTab={(tab) => (
             <>
               {renderTabToolbar(tab)}
-              <Suspense fallback={<TabLoadState label={tab} state="loading" />}>
-                {renderTabPanel(tab)}
-              </Suspense>
+              <TabErrorBoundary label={tab} resetKey={tab}>
+                <Suspense fallback={<TabLoadState label={tab} state="loading" />}>
+                  {renderTabPanel(tab)}
+                </Suspense>
+              </TabErrorBoundary>
             </>
           )}
           tabs={tabs}

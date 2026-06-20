@@ -415,6 +415,23 @@ test("uses the multilingual application font stack", () => {
   );
 });
 
+test("defines the carousel layout and local tab states", () => {
+  const applicationStyles = readFileSync("src/styles.css", "utf8");
+
+  expect(applicationStyles).toMatch(
+    /\.tab-carousel-viewport\s*\{[\s\S]*?overflow:\s*clip;[\s\S]*?touch-action:\s*pan-y;/,
+  );
+  expect(applicationStyles).toMatch(
+    /\.tab-carousel-track\s*\{[\s\S]*?display:\s*flex;[\s\S]*?will-change:\s*transform;/,
+  );
+  expect(applicationStyles).toMatch(
+    /\.tab-carousel-slide\s*\{[\s\S]*?flex:\s*0 0 100%;/,
+  );
+  expect(applicationStyles).toContain(".tab-local-skeleton");
+  expect(applicationStyles).toContain(".tab-refresh-notice");
+  expect(applicationStyles).not.toContain("@keyframes tab-screen-enter-right");
+});
+
 test("uses compact mobile spacing around fixture date headings", () => {
   const applicationStyles = readFileSync("src/styles.css", "utf8");
 
