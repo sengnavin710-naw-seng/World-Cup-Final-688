@@ -81,7 +81,9 @@ export function AppShell({
         (fixture) =>
           fixture.homeTeam === participant.teamCode ||
           fixture.awayTeam === participant.teamCode,
-      )?.group ?? "A",
+      )?.group ??
+      queries.fixtures.data?.[0]?.group ??
+      "A",
     [participant.teamCode, queries.fixtures.data],
   );
   const selectedFixtureGroup = fixtureGroupOverride || participantFixtureGroup;

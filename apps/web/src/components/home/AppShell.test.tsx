@@ -38,6 +38,14 @@ function setReducedMotionPreference(matches: boolean) {
 
 beforeEach(() => {
   setReducedMotionPreference(false);
+  Object.defineProperty(window, "requestIdleCallback", {
+    configurable: true,
+    value: vi.fn(() => 1),
+  });
+  Object.defineProperty(window, "cancelIdleCallback", {
+    configurable: true,
+    value: vi.fn(),
+  });
   window.localStorage.clear();
   window.localStorage.setItem(
     "wcf688-session",
@@ -220,6 +228,98 @@ test("prefetches the destination on tab pointer down", async () => {
       expect.anything(),
     );
   });
+});
+
+test("prefetches the destination on tab focus", async () => {
+  render(<App />);
+  await screen.findByLabelText("World Cup knockout bracket");
+
+  fireEvent.focus(screen.getByRole("tab", { name: "News" }));
+
+  await waitFor(() => {
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/tournament/news"),
+      expect.anything(),
+    );
+  });
+});
+
+test("uses local loading and error states when a tab has no cached data", async () => {
+  const pendingNews = deferredResponse();
+  const currentFetch = global.fetch;
+  global.fetch = vi.fn((input, init) => {
+    if (String(input).includes("/api/tournament/news")) {
+      return pendingNews.promise;
+    }
+
+    return currentFetch(input, init);
+  }) as typeof fetch;
+
+  render(<App />);
+  await screen.findByLabelText("World Cup knockout bracket");
+
+  fireEvent.click(screen.getByRole("tab", { name: "News" }));
+
+  expect(screen.getByLabelText("Loading News")).toBeInTheDocument();
+
+  await act(async () => {
+    pendingNews.resolve(
+      new Response(JSON.stringify({ message: "Temporary failure" }), {
+        status: 503,
+      }),
+    );
+  });
+
+  expect(
+    await screen.findByText("Unable to load News.", {}, { timeout: 3_000 }),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "News" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  expect(screen.getByText("World Cup Festival 688")).toBeInTheDocument();
+});
+
+test("falls back to the first fixture group when the participant has no fixtures", async () => {
+  const currentFetch = global.fetch;
+  global.fetch = vi.fn((input, init) => {
+    if (String(input).includes("/api/tournament/fixtures")) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            fixtures: [
+              {
+                awayFlag: "🇯🇵",
+                awayTeam: "JPN",
+                awayTeamName: "Japan",
+                group: "C",
+                homeFlag: "🇧🇷",
+                homeTeam: "BRA",
+                homeTeamName: "Brazil",
+                id: "fixture-c-1",
+                kickoff: "2026-06-29T03:00:00Z",
+                matchNumber: 1,
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      );
+    }
+
+    return currentFetch(input, init);
+  }) as typeof fetch;
+
+  render(<App />);
+
+  fireEvent.click(screen.getByRole("tab", { name: "Fixtures" }));
+  const groupFilter = await screen.findByRole("button", { name: /Group/i });
+  fireEvent.click(groupFilter);
+
+  expect(
+    await screen.findByRole("heading", { name: "Group C" }),
+  ).toBeInTheDocument();
+  expect(screen.getByText("Brazil")).toBeInTheDocument();
 });
 
 test("renders the knockout panel as a full-bleed bracket surface", async () => {
