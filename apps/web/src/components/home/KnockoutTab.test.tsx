@@ -245,6 +245,71 @@ test("does not attach an owner name to unresolved knockout placeholders", () => 
   expect(screen.queryByText(BURMESE_NAME)).not.toBeInTheDocument();
 });
 
+test("defaults the knockout status filter to As it stands", () => {
+  render(<KnockoutTab rounds={rounds} teams={[]} />);
+
+  expect(screen.getByRole("button", { name: "As it stands" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  expect(screen.getByRole("button", { name: "Confirmed" })).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
+});
+
+test("shows only confirmed teams and preserves placeholders in Confirmed mode", () => {
+  const statusRounds: KnockoutRound[] = [
+    {
+      round: "Round of 32",
+      matches: [
+        {
+          id: "status-1",
+          matchNumber: 73,
+          homeTeam: "Argentina",
+          awayTeam: "Projected Germany",
+          homeTeamConfirmed: true,
+          awayTeamConfirmed: false,
+          awayTeamPlaceholder: "Group E winners",
+          homeScore: 0,
+          awayScore: 0,
+          kickoff: "2026-06-28",
+          venue: "Los Angeles Stadium",
+        },
+        {
+          id: "status-2",
+          matchNumber: 74,
+          homeTeam: "Projected Mexico",
+          awayTeam: "Projected Canada",
+          homeTeamConfirmed: false,
+          awayTeamConfirmed: false,
+          awayTeamPlaceholder: "Group B runners-up",
+          homeScore: 0,
+          awayScore: 0,
+          kickoff: "2026-06-29",
+          venue: "Boston Stadium",
+        },
+      ],
+    },
+  ];
+
+  render(<KnockoutTab rounds={statusRounds} teams={[]} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Confirmed" }));
+
+  expect(screen.getByRole("button", { name: "Confirmed" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  expect(screen.getAllByText("Argentina").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("Group E winners").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("Group B runners-up").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("TBD").length).toBeGreaterThan(0);
+  expect(screen.queryByText("Projected Germany")).not.toBeInTheDocument();
+  expect(screen.queryByText("Projected Mexico")).not.toBeInTheDocument();
+  expect(screen.queryByText("Projected Canada")).not.toBeInTheDocument();
+});
+
 test("formats knockout ISO dates with a default kickoff time", () => {
   const isoDateRounds: KnockoutRound[] = [
     {
@@ -973,7 +1038,7 @@ test("hands a very fast forward swipe to the next home tab", () => {
   expect(scrollTo).not.toHaveBeenCalled();
 });
 
-test("fades the outgoing mobile round as the bracket moves", () => {
+test("fades outgoing connector lines with their source cards", () => {
   render(<KnockoutTab rounds={fullMobileRounds} teams={[]} />);
   const mobileBracket = screen.getByLabelText("World Cup knockout rounds");
   const scroller = mobileBracket.querySelector(".knockout-mobile-bracket-scroll");
@@ -993,7 +1058,18 @@ test("fades the outgoing mobile round as the bracket moves", () => {
   const outgoingCard = mobileBracket.querySelector(
     '.knockout-mobile-bracket-card[data-round-index="0"]',
   );
+  const getOutgoingConnector = () =>
+    mobileBracket.querySelector(
+      '.knockout-mobile-connectors path[data-source-round-index="0"]',
+    );
+
   expect(outgoingCard).toHaveStyle({ opacity: "0.5" });
+  expect(getOutgoingConnector()).toHaveStyle({ opacity: "0.5" });
+
+  scrollLeft = 256;
+  fireEvent.scroll(scroller!);
+
+  expect(getOutgoingConnector()).toHaveStyle({ opacity: "0" });
 });
 
 test("does not snap back to the top after a vertical mobile bracket scroll", () => {
@@ -1037,6 +1113,14 @@ test("does not snap back to the top after a vertical mobile bracket scroll", () 
     "aria-selected",
     "true",
   );
+});
+
+test("marks the mobile bracket scroller as independent from parent tab swipes", () => {
+  render(<KnockoutTab rounds={fullMobileRounds} teams={[]} />);
+  const mobileBracket = screen.getByLabelText("World Cup knockout rounds");
+  const scroller = mobileBracket.querySelector(".knockout-mobile-bracket-scroll");
+
+  expect(scroller).toHaveAttribute("data-tab-swipe-ignore", "true");
 });
 
 test("uses compact card sizing for the knockout bracket", () => {
@@ -1093,6 +1177,29 @@ test("sizes mobile round chips by their labels like the reference", () => {
   );
   expect(applicationStyles).toMatch(
     /\.knockout-round-chip strong\s*\{[^}]*font-size:\s*0\.78rem;/s,
+  );
+});
+
+test("uses one white mobile Knockout container with dark match cards", () => {
+  const applicationStyles = readFileSync("src/styles.css", "utf8");
+
+  expect(applicationStyles).toMatch(
+    /\.knockout-mobile\s*\{[^}]*border:\s*1px solid var\(--line\);[^}]*border-radius:\s*10px;[^}]*background:\s*#ffffff;[^}]*box-shadow:\s*none;/s,
+  );
+  expect(applicationStyles).toMatch(
+    /\.knockout-status-filter\s*\{[^}]*gap:\s*8px;[^}]*padding:\s*8px;[^}]*background:\s*#ffffff;/s,
+  );
+  expect(applicationStyles).toMatch(
+    /\.knockout-round-strip\s*\{[^}]*padding:\s*8px;[^}]*background:\s*#ffffff;/s,
+  );
+  expect(applicationStyles).toMatch(
+    /\.knockout-mobile-bracket-scroll\s*\{[^}]*background:\s*#ffffff;/s,
+  );
+  expect(applicationStyles).toMatch(
+    /\.knockout-mobile-bracket-card\s*\{[^}]*background:\s*#202020;/s,
+  );
+  expect(applicationStyles).toMatch(
+    /\.knockout-status-chip\[aria-pressed="true"\]\s*\{[^}]*background:\s*#00abff;[^}]*color:\s*#ffffff;/s,
   );
 });
 

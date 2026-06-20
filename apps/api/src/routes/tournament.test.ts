@@ -42,6 +42,12 @@ test("knockout endpoint returns the full bracket layout", async () => {
   expect(quarterFinals.matches).toHaveLength(4);
   expect(matches).toHaveLength(32);
   expect(matches.filter((match: { side?: string }) => match.side === "center")).toHaveLength(2);
+  expect(matches[0]).toMatchObject({
+    awayTeamConfirmed: false,
+    awayTeamPlaceholder: "Best third A/B/C/D/F",
+    homeTeamConfirmed: false,
+    homeTeamPlaceholder: "Group E winners",
+  });
   expect(matches).toEqual(
     expect.arrayContaining([
       expect.objectContaining({

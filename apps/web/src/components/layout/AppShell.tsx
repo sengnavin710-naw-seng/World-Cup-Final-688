@@ -332,6 +332,8 @@ export function AppShell({
         "tab-panel",
         tab === "Knockout" ? "tab-panel-knockout" : "",
         tab === "Fixtures" ? "tab-panel-fixtures" : "",
+        tab === "Table" ? "tab-panel-table" : "",
+        tab === "News" ? "tab-panel-news" : "",
       ]
         .filter(Boolean)
         .join(" ")}

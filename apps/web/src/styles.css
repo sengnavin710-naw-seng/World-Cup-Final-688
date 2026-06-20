@@ -519,11 +519,18 @@ button {
   overflow: hidden;
 }
 
+.tab-panel-table {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .tab-carousel-viewport {
   min-width: 0;
   overflow: clip;
   touch-action: pan-y;
-  transition: height 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: height 300ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .tab-carousel-track {
@@ -1195,11 +1202,47 @@ button {
   width: 100%;
   max-width: 100%;
   overflow: hidden;
-  border: 1px solid #2c2c2c;
-  border-radius: 8px;
-  background: #050505;
-  color: #f5f8ff;
-  box-shadow: 0 18px 34px rgba(11, 30, 44, 0.14);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--text);
+  box-shadow: none;
+}
+
+.knockout-status-filter {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px;
+  background: #ffffff;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.knockout-status-filter::-webkit-scrollbar {
+  display: none;
+}
+
+.knockout-status-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-alt);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.knockout-status-chip[aria-pressed="true"] {
+  border-color: #00abff;
+  background: #00abff;
+  color: #ffffff;
 }
 
 .knockout-round-strip {
@@ -1207,8 +1250,8 @@ button {
   gap: 8px;
   overflow-x: auto;
   padding: 8px;
-  border-bottom: 1px solid #1f1f1f;
-  background: #050505;
+  border-bottom: 1px solid var(--line);
+  background: #ffffff;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -1225,13 +1268,13 @@ button {
   flex: 0 0 auto;
   min-width: fit-content;
   height: 34px;
-  border: 1px solid #313131;
-  border-color: color-mix(in srgb, #313131, #ffffff var(--round-selection-percent));
+  border: 1px solid var(--line);
+  border-color: color-mix(in srgb, var(--line), #00abff var(--round-selection-percent));
   border-radius: 999px;
-  background: #343434;
-  background: color-mix(in srgb, #343434, #ffffff var(--round-selection-percent));
-  color: #f2f5f8;
-  color: color-mix(in srgb, #f2f5f8, #171717 var(--round-selection-percent));
+  background: var(--surface-alt);
+  background: color-mix(in srgb, var(--surface-alt), #00abff var(--round-selection-percent));
+  color: var(--text);
+  color: color-mix(in srgb, var(--text), #ffffff var(--round-selection-percent));
   padding: 0 10px;
   text-align: center;
 }
@@ -1248,9 +1291,7 @@ button {
   overflow: auto;
   overscroll-behavior: contain;
   touch-action: pan-y;
-  background:
-    radial-gradient(circle at 82% 10%, rgba(20, 66, 170, 0.22), transparent 20%),
-    #050505;
+  background: #ffffff;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -1281,11 +1322,12 @@ button {
 
 .knockout-mobile-connectors path {
   fill: none;
-  stroke: #2d66d7;
+  stroke: #00abff;
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
+  will-change: opacity;
 }
 
 .knockout-mobile-bracket-card {
@@ -1712,6 +1754,22 @@ button {
 }
 
 @media (max-width: 760px) {
+  .home-chrome {
+    margin-bottom: 8px;
+  }
+
+  .tab-panel-knockout {
+    margin-top: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .tab-panel-news {
+    padding-top: 0;
+  }
+
   .knockout-board-scroll {
     display: none;
   }

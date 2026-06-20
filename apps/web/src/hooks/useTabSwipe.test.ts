@@ -26,6 +26,14 @@ function SwipeHarness({
       ref: swipe.viewportRef,
     },
     createElement("div", { ref: swipe.trackRef }),
+    createElement(
+      "div",
+      {
+        "data-tab-swipe-ignore": "true",
+        "data-testid": "nested-scroll-area",
+      },
+      "Nested scroll area",
+    ),
   );
 }
 
@@ -167,6 +175,19 @@ describe("resolveSwipeDelta", () => {
         distanceX: -30,
         distanceY: 8,
         elapsedMs: 220,
+        tabCount: 4,
+        viewportWidth: 390,
+      }),
+    ).toBe(0);
+  });
+
+  test("stays on the current tab after a short quick flick", () => {
+    expect(
+      resolveSwipeDelta({
+        activeIndex: 1,
+        distanceX: -42,
+        distanceY: 2,
+        elapsedMs: 60,
         tabCount: 4,
         viewportWidth: 390,
       }),
@@ -323,6 +344,30 @@ describe("useTabSwipe", () => {
     expect(onIndexChange).toHaveBeenCalledWith(2);
   });
 
+  test("does not capture gestures that start in an ignored nested scroll area", () => {
+    const onIndexChange = vi.fn();
+    render(createElement(SwipeHarness, { onIndexChange }));
+    const nestedScrollArea = screen.getByTestId("nested-scroll-area");
+
+    firePointerEvent(nestedScrollArea, "pointerdown", {
+      clientX: 240,
+      clientY: 200,
+      pointerId: 5,
+    });
+    firePointerEvent(nestedScrollArea, "pointermove", {
+      clientX: 80,
+      clientY: 202,
+      pointerId: 5,
+    });
+    firePointerEvent(nestedScrollArea, "pointerup", {
+      clientX: 80,
+      clientY: 202,
+      pointerId: 5,
+    });
+
+    expect(onIndexChange).not.toHaveBeenCalled();
+  });
+
   test("keeps the settle transition after a height-only viewport resize", () => {
     installControlledResizeObserver();
     render(createElement(NormalMotionSwipeHarness));
@@ -336,7 +381,7 @@ describe("useTabSwipe", () => {
       .find((observer) => observer.observedTargets.has(viewport));
 
     expect(viewportObserver).toBeDefined();
-    expect(track.style.transition).toContain("transform 180ms");
+    expect(track.style.transition).toContain("transform 300ms");
 
     viewportObserver?.trigger({
       height: 720,
@@ -344,6 +389,6 @@ describe("useTabSwipe", () => {
       width: 390,
     });
 
-    expect(track.style.transition).toContain("transform 180ms");
+    expect(track.style.transition).toContain("transform 300ms");
   });
 });

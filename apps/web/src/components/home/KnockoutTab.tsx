@@ -14,6 +14,12 @@ type MobilePositionedMatch = BracketMatch & {
   x: number;
   y: number;
 };
+type MobileConnectorPath = {
+  d: string;
+  opacity: number;
+  sourceRoundIndex: number;
+  targetRoundIndex: number;
+};
 type MobileRoundMotion = {
   fromRoundIndex: number;
   progress: number;
@@ -465,7 +471,7 @@ function getRoundSelectionProgress(motion: MobileRoundMotion, roundIndex: number
 }
 
 function getMobileConnectorPaths(matchesByRound: MobilePositionedMatch[][], rounds: KnockoutRound[]) {
-  const mobileConnectorPaths: string[] = [];
+  const mobileConnectorPaths: MobileConnectorPath[] = [];
 
   matchesByRound.forEach((roundMatches, roundIndex) => {
     const nextRoundMatches = matchesByRound[roundIndex + 1];
@@ -479,7 +485,12 @@ function getMobileConnectorPaths(matchesByRound: MobilePositionedMatch[][], roun
       const finalMatch = nextRoundMatches.find((match) => match.badge === "FINAL") ?? nextRoundMatches[0];
 
       if (roundMatches.length >= 2 && finalMatch) {
-        mobileConnectorPaths.push(makeMobilePairPath(roundMatches[0], roundMatches[1], finalMatch));
+        mobileConnectorPaths.push({
+          d: makeMobilePairPath(roundMatches[0], roundMatches[1], finalMatch),
+          opacity: Math.min(roundMatches[0].opacity, roundMatches[1].opacity, finalMatch.opacity),
+          sourceRoundIndex: roundIndex,
+          targetRoundIndex: roundIndex + 1,
+        });
       }
 
       return;
@@ -495,7 +506,12 @@ function getMobileConnectorPaths(matchesByRound: MobilePositionedMatch[][], roun
       const sourceB = roundMatches[sourceBIndex];
 
       if (sourceA && sourceB) {
-        mobileConnectorPaths.push(makeMobilePairPath(sourceA, sourceB, target));
+        mobileConnectorPaths.push({
+          d: makeMobilePairPath(sourceA, sourceB, target),
+          opacity: Math.min(sourceA.opacity, sourceB.opacity, target.opacity),
+          sourceRoundIndex: roundIndex,
+          targetRoundIndex: roundIndex + 1,
+        });
       }
     });
   });
@@ -792,6 +808,9 @@ export function KnockoutTab({
   rounds: KnockoutRound[];
   teams: Team[];
 }) {
+  const [statusView, setStatusView] = useState<"as-it-stands" | "confirmed">(
+    "as-it-stands",
+  );
   const [activeMobileRound, setActiveMobileRound] = useState("");
   const [mobileScrollLeft, setMobileScrollLeft] = useState(0);
   const [mobileViewportWidth, setMobileViewportWidth] = useState(0);
@@ -802,15 +821,33 @@ export function KnockoutTab({
   const mobileSnapAnimationFrameRef = useRef<number | null>(null);
   const mobileScrollFrameRef = useRef<number | null>(null);
   const latestMobileScrollLeftRef = useRef(0);
-  const matches = useMemo(() => getBracketMatches(rounds), [rounds]);
+  const displayRounds = useMemo(
+    () =>
+      statusView === "as-it-stands"
+        ? rounds
+        : rounds.map((round) => ({
+            ...round,
+            matches: round.matches.map((match) => ({
+              ...match,
+              homeTeam: match.homeTeamConfirmed
+                ? match.homeTeam
+                : match.homeTeamPlaceholder || "TBD",
+              awayTeam: match.awayTeamConfirmed
+                ? match.awayTeam
+                : match.awayTeamPlaceholder || "TBD",
+            })),
+          })),
+    [rounds, statusView],
+  );
+  const matches = useMemo(() => getBracketMatches(displayRounds), [displayRounds]);
   const connectorPaths = useMemo(() => getConnectorPaths(), []);
   const expandedFinalWidth = Math.max(
     mobileBoard.cardWidth,
     mobileViewportWidth - mobileBoard.left * 2,
   );
   const mobileLayout = useMemo(
-    () => getMobileBracketLayout(rounds, mobileScrollLeft, expandedFinalWidth),
-    [expandedFinalWidth, mobileScrollLeft, rounds],
+    () => getMobileBracketLayout(displayRounds, mobileScrollLeft, expandedFinalWidth),
+    [displayRounds, expandedFinalWidth, mobileScrollLeft],
   );
   const mobileRoundMotion = useMemo(
     () =>
@@ -1191,6 +1228,29 @@ export function KnockoutTab({
       </div>
 
       <section className="knockout-mobile" aria-label="World Cup knockout rounds">
+        <div
+          className="knockout-status-filter"
+          role="group"
+          aria-label="Knockout status"
+        >
+          <button
+            aria-pressed={statusView === "as-it-stands"}
+            className="knockout-status-chip"
+            type="button"
+            onClick={() => setStatusView("as-it-stands")}
+          >
+            As it stands
+          </button>
+          <button
+            aria-pressed={statusView === "confirmed"}
+            className="knockout-status-chip"
+            type="button"
+            onClick={() => setStatusView("confirmed")}
+          >
+            Confirmed
+          </button>
+        </div>
+
         <div className="knockout-round-strip" role="tablist" aria-label="Knockout rounds">
           {rounds.map((round, roundIndex) => {
             const selectionProgress = getRoundSelectionProgress(
@@ -1225,6 +1285,7 @@ export function KnockoutTab({
 
         <div
           className="knockout-mobile-bracket-scroll"
+          data-tab-swipe-ignore="true"
           ref={mobileBoardScrollRef}
           onScroll={(event) => handleMobileBracketScroll(event.currentTarget)}
           onTouchCancel={handleMobileBracketTouchCancel}
@@ -1247,8 +1308,14 @@ export function KnockoutTab({
               focusable="false"
               viewBox={`0 0 ${mobileLayout.width} ${mobileLayout.height}`}
             >
-              {mobileLayout.connectorPaths.map((path, index) => (
-                <path key={`${path}-${index}`} d={path} />
+              {mobileLayout.connectorPaths.map((connector, index) => (
+                <path
+                  data-source-round-index={connector.sourceRoundIndex}
+                  data-target-round-index={connector.targetRoundIndex}
+                  key={`${connector.d}-${index}`}
+                  d={connector.d}
+                  style={{ opacity: connector.opacity }}
+                />
               ))}
             </svg>
 

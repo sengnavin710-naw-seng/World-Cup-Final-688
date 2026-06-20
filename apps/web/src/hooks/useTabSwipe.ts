@@ -7,11 +7,12 @@ import {
 
 const HORIZONTAL_INTENT_RATIO = 1.2;
 const INTENT_SLOP = 8;
-const DISTANCE_THRESHOLD_RATIO = 0.18;
-const MIN_VELOCITY_DISTANCE = 36;
-const VELOCITY_THRESHOLD = 0.55;
+const DISTANCE_THRESHOLD_RATIO = 0.28;
+const MIN_VELOCITY_DISTANCE = 72;
+const VELOCITY_THRESHOLD = 1.1;
 const EDGE_RESISTANCE = 0.18;
-const SETTLE_TRANSITION = "transform 180ms cubic-bezier(0.22, 1, 0.36, 1)";
+const SETTLE_TRANSITION = "transform 300ms cubic-bezier(0.22, 1, 0.36, 1)";
+const TAB_SWIPE_IGNORE_SELECTOR = "[data-tab-swipe-ignore='true']";
 
 export interface SwipeDecisionInput {
   activeIndex: number;
@@ -160,6 +161,16 @@ export function useTabSwipe({
 
   const onPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
+      const target = event.target;
+      const ignoredTarget =
+        target instanceof Element
+          ? target.closest(TAB_SWIPE_IGNORE_SELECTOR)
+          : null;
+
+      if (ignoredTarget && event.currentTarget.contains(ignoredTarget)) {
+        return;
+      }
+
       if (activeGestureRef.current?.captured) {
         return;
       }

@@ -322,7 +322,7 @@ test("falls back to the first fixture group when the participant has no fixtures
   expect(screen.getByText("Brazil")).toBeInTheDocument();
 });
 
-test("renders the knockout panel as a full-bleed bracket surface", async () => {
+test("uses the shared mobile gap above the knockout surface", async () => {
   render(<App />);
 
   const knockoutBracket = await screen.findByLabelText("World Cup knockout bracket");
@@ -334,7 +334,43 @@ test("renders the knockout panel as a full-bleed bracket surface", async () => {
     /\.tab-panel-knockout\s*\{[^}]*padding:\s*0;/,
   );
   expect(applicationStyles).toMatch(
-    /\.tab-panel-knockout\s*\{[^}]*margin-top:\s*-8px;/,
+    /@media\s*\(max-width:\s*760px\)[\s\S]*?\.home-chrome\s*\{[^}]*margin-bottom:\s*8px;/,
+  );
+  expect(applicationStyles).toMatch(
+    /@media\s*\(max-width:\s*760px\)[\s\S]*?\.tab-panel-knockout\s*\{[^}]*margin-top:\s*0;/,
+  );
+});
+
+test("marks the News panel for compact mobile spacing", async () => {
+  render(<App />);
+
+  await act(async () => {
+    fireEvent.click(screen.getByRole("tab", { name: "News" }));
+  });
+
+  await waitFor(() => {
+    expect(
+      screen.getByTestId("tab-slide-News").querySelector(".tab-panel"),
+    ).toHaveClass("tab-panel-news");
+  });
+});
+
+test("renders table group cards without an outer container and with 8px side spacing", async () => {
+  render(<App />);
+
+  await act(async () => {
+    fireEvent.click(screen.getByRole("tab", { name: "Table" }));
+  });
+  const tableSlide = screen.getByTestId("tab-slide-Table");
+  const tablePanel = tableSlide.querySelector(".tab-panel");
+  const applicationStyles = readFileSync("src/styles.css", "utf8");
+
+  expect(tablePanel).toHaveClass("tab-panel-table");
+  expect(applicationStyles).toMatch(
+    /\.tab-panel-table\s*\{[^}]*padding:\s*0;[^}]*border:\s*0;[^}]*background:\s*transparent;[^}]*box-shadow:\s*none;/,
+  );
+  expect(applicationStyles).toMatch(
+    /@media\s*\(max-width:\s*640px\)[\s\S]*?\.app-shell\s*\{[^}]*padding:\s*8px;/,
   );
 });
 
