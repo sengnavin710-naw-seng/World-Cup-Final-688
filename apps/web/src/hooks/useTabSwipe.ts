@@ -426,9 +426,10 @@ export function useTabSwipe({
       }
 
       activeGestureRef.current = null;
-      settle();
+      cancelFrame();
+      startTargetSettle(activeIndex);
     },
-    [settle],
+    [activeIndex, cancelFrame, startTargetSettle],
   );
 
   return {

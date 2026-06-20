@@ -191,7 +191,7 @@ function setViewportWidth(viewport: HTMLElement, width: number) {
 
 function firePointerEvent(
   viewport: HTMLElement,
-  type: "pointerdown" | "pointermove" | "pointerup",
+  type: "pointercancel" | "pointerdown" | "pointermove" | "pointerup",
   { clientX, clientY, pointerId }: PointerEventInit,
 ) {
   const event = new Event(type, { bubbles: true, cancelable: true });
@@ -547,6 +547,73 @@ describe("useTabSwipe", () => {
 
     expect(onIndexChange).toHaveBeenCalledTimes(1);
     expect(onIndexChange).toHaveBeenCalledWith(2);
+  });
+
+  test("keeps a cancelled snap-back locked until it settles", () => {
+    vi.useFakeTimers();
+
+    const onIndexChange = vi.fn();
+    render(createElement(SettlingSwipeHarness, { onIndexChange }));
+    const viewport = screen.getByTestId("swipe-viewport");
+
+    setNonCapturingPointerApi(viewport);
+
+    startRejectedSwipeDrag(viewport, 17);
+    firePointerEvent(viewport, "pointercancel", {
+      clientX: 200,
+      clientY: 202,
+      pointerId: 17,
+    });
+
+    const track = screen.getByTestId("swipe-track");
+
+    expect(track.style.transform).toBe("translate3d(-390px, 0, 0)");
+    expect(track.style.transition).toBe(
+      "transform 300ms cubic-bezier(0.4, 0, 0.2, 1)",
+    );
+
+    swipeLeftAccepted(viewport, 18);
+
+    expect(onIndexChange).not.toHaveBeenCalled();
+    expect(track.style.transform).toBe("translate3d(-390px, 0, 0)");
+
+    fireTransitionEndEvent(track, "transform");
+
+    swipeLeftAccepted(viewport, 19);
+
+    expect(track.style.transform).toBe("translate3d(-780px, 0, 0)");
+    expect(onIndexChange).not.toHaveBeenCalled();
+
+    fireTransitionEndEvent(track, "transform");
+
+    expect(onIndexChange).toHaveBeenCalledTimes(1);
+    expect(onIndexChange).toHaveBeenCalledWith(2);
+  });
+
+  test("cancels a stale drag frame before a cancelled snap-back settles", () => {
+    vi.useFakeTimers();
+    const frameClock = installAnimationFrameClock();
+
+    const onIndexChange = vi.fn();
+    render(createElement(SettlingSwipeHarness, { onIndexChange }));
+    const viewport = screen.getByTestId("swipe-viewport");
+    const track = screen.getByTestId("swipe-track");
+
+    setNonCapturingPointerApi(viewport);
+
+    startRejectedSwipeDrag(viewport, 20);
+    firePointerEvent(viewport, "pointercancel", {
+      clientX: 200,
+      clientY: 202,
+      pointerId: 20,
+    });
+
+    expect(track.style.transform).toBe("translate3d(-390px, 0, 0)");
+
+    frameClock.advance(16);
+
+    expect(track.style.transform).toBe("translate3d(-390px, 0, 0)");
+    expect(onIndexChange).not.toHaveBeenCalled();
   });
 
   test("commits immediately when reduced motion is enabled", () => {
