@@ -4,14 +4,16 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { resolveSwipeDelta, useTabSwipe } from "./useTabSwipe";
 
 function SwipeHarness({
+  reducedMotion = true,
   onIndexChange,
 }: {
   onIndexChange: (nextIndex: number) => void;
+  reducedMotion?: boolean;
 }) {
   const swipe = useTabSwipe({
     activeIndex: 1,
     onIndexChange,
-    reducedMotion: true,
+    reducedMotion,
     tabCount: 4,
   });
 
@@ -25,7 +27,10 @@ function SwipeHarness({
       onPointerUp: swipe.onPointerUp,
       ref: swipe.viewportRef,
     },
-    createElement("div", { ref: swipe.trackRef }),
+    createElement("div", {
+      "data-testid": "swipe-track",
+      ref: swipe.trackRef,
+    }),
     createElement(
       "div",
       {
@@ -34,6 +39,44 @@ function SwipeHarness({
       },
       "Nested scroll area",
     ),
+  );
+}
+
+function SettlingSwipeHarness({ onIndexChange }: { onIndexChange: (nextIndex: number) => void; }) {
+  const [activeIndex, setActiveIndex] = useState(1);
+  const swipe = useTabSwipe({
+    activeIndex,
+    onIndexChange: (nextIndex) => {
+      onIndexChange(nextIndex);
+      setActiveIndex(nextIndex);
+    },
+    reducedMotion: false,
+    tabCount: 4,
+  });
+
+  const setViewportRef = (node: HTMLDivElement | null) => {
+    if (node) {
+      setViewportWidth(node, 390);
+    }
+
+    (swipe.viewportRef as MutableRefObject<HTMLDivElement | null>).current =
+      node;
+  };
+
+  return createElement(
+    "div",
+    {
+      "data-testid": "swipe-viewport",
+      onPointerCancel: swipe.onPointerCancel,
+      onPointerDown: swipe.onPointerDown,
+      onPointerMove: swipe.onPointerMove,
+      onPointerUp: swipe.onPointerUp,
+      ref: setViewportRef,
+    },
+    createElement("div", {
+      "data-testid": "swipe-track",
+      ref: swipe.trackRef,
+    }),
   );
 }
 
@@ -97,6 +140,15 @@ function firePointerEvent(
     pointerId: { value: pointerId },
   });
   fireEvent(viewport, event);
+}
+
+function fireTransitionEndEvent(
+  target: HTMLElement,
+  propertyName: string,
+) {
+  const event = new Event("transitionend", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "propertyName", { value: propertyName });
+  fireEvent(target, event);
 }
 
 class ControlledResizeObserver implements ResizeObserver {
@@ -245,6 +297,46 @@ describe("resolveSwipeDelta", () => {
 });
 
 describe("useTabSwipe", () => {
+  test("settles an accepted swipe before committing navigation", () => {
+    const onIndexChange = vi.fn();
+    render(createElement(SettlingSwipeHarness, { onIndexChange }));
+    const viewport = screen.getByTestId("swipe-viewport");
+    const track = screen.getByTestId("swipe-track");
+
+    Object.assign(viewport, {
+      hasPointerCapture: () => false,
+      releasePointerCapture: vi.fn(),
+      setPointerCapture: vi.fn(),
+    });
+
+    firePointerEvent(viewport, "pointerdown", {
+      clientX: 260,
+      clientY: 200,
+      pointerId: 6,
+    });
+    firePointerEvent(viewport, "pointermove", {
+      clientX: 140,
+      clientY: 202,
+      pointerId: 6,
+    });
+    firePointerEvent(viewport, "pointerup", {
+      clientX: 140,
+      clientY: 202,
+      pointerId: 6,
+    });
+
+    expect(onIndexChange).not.toHaveBeenCalled();
+    expect(track.style.transform).toBe("translate3d(-780px, 0, 0)");
+    expect(track.style.transition).toBe(
+      "transform 300ms cubic-bezier(0.4, 0, 0.2, 1)",
+    );
+
+    fireTransitionEndEvent(track, "transform");
+
+    expect(onIndexChange).toHaveBeenCalledTimes(1);
+    expect(onIndexChange).toHaveBeenCalledWith(2);
+  });
+
   test("does not navigate after locking vertical intent without pointer capture APIs", () => {
     const onIndexChange = vi.fn();
     render(createElement(SwipeHarness, { onIndexChange }));

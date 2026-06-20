@@ -11,7 +11,9 @@ const DISTANCE_THRESHOLD_RATIO = 0.28;
 const MIN_VELOCITY_DISTANCE = 72;
 const VELOCITY_THRESHOLD = 1.1;
 const EDGE_RESISTANCE = 0.18;
-const SETTLE_TRANSITION = "transform 300ms cubic-bezier(0.22, 1, 0.36, 1)";
+const SETTLE_DURATION_MS = 300;
+const SETTLE_FALLBACK_MS = 380;
+const SETTLE_TRANSITION = `transform ${SETTLE_DURATION_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`;
 const TAB_SWIPE_IGNORE_SELECTOR = "[data-tab-swipe-ignore='true']";
 
 export interface SwipeDecisionInput {
@@ -86,6 +88,10 @@ export function useTabSwipe({
   const trackRef = useRef<HTMLDivElement>(null);
   const activeGestureRef = useRef<ActiveGesture | null>(null);
   const rafRef = useRef<number | null>(null);
+  const pendingTargetIndexRef = useRef<number | null>(null);
+  const pendingTransitionEndListenerRef = useRef<((event: TransitionEvent) => void) | null>(null);
+  const pendingTransitionEndTargetRef = useRef<HTMLDivElement | null>(null);
+  const pendingTimeoutRef = useRef<number | null>(null);
   const observedViewportWidthRef = useRef<number | null>(null);
 
   const cancelFrame = useCallback(() => {
@@ -121,9 +127,88 @@ export function useTabSwipe({
     [activeIndex, cancelFrame, setTransform],
   );
 
+  const clearPendingSettle = useCallback(() => {
+    if (pendingTimeoutRef.current !== null) {
+      window.clearTimeout(pendingTimeoutRef.current);
+      pendingTimeoutRef.current = null;
+    }
+
+    if (
+      pendingTransitionEndTargetRef.current &&
+      pendingTransitionEndListenerRef.current
+    ) {
+      pendingTransitionEndTargetRef.current.removeEventListener(
+        "transitionend",
+        pendingTransitionEndListenerRef.current,
+      );
+    }
+
+    pendingTargetIndexRef.current = null;
+    pendingTransitionEndTargetRef.current = null;
+    pendingTransitionEndListenerRef.current = null;
+  }, []);
+
+  const completePendingSettle = useCallback(() => {
+    const targetIndex = pendingTargetIndexRef.current;
+
+    if (targetIndex === null) {
+      return;
+    }
+
+    clearPendingSettle();
+    onIndexChange(targetIndex);
+  }, [clearPendingSettle, onIndexChange]);
+
+  const startTargetSettle = useCallback(
+    (targetIndex: number) => {
+      const track = trackRef.current;
+
+      clearPendingSettle();
+
+      if (targetIndex === activeIndex) {
+        setTransform(targetIndex, 0, true);
+        return;
+      }
+
+      if (!track || reducedMotion) {
+        onIndexChange(targetIndex);
+        return;
+      }
+
+      const handleTransitionEnd = (event: TransitionEvent) => {
+        if (event.target !== track || event.propertyName !== "transform") {
+          return;
+        }
+
+        completePendingSettle();
+      };
+
+      pendingTargetIndexRef.current = targetIndex;
+      pendingTransitionEndTargetRef.current = track;
+      pendingTransitionEndListenerRef.current = handleTransitionEnd;
+
+      setTransform(targetIndex, 0, true);
+      track.addEventListener("transitionend", handleTransitionEnd);
+      pendingTimeoutRef.current = window.setTimeout(() => {
+        completePendingSettle();
+      }, SETTLE_FALLBACK_MS);
+    },
+    [
+      activeIndex,
+      clearPendingSettle,
+      completePendingSettle,
+      onIndexChange,
+      reducedMotion,
+      setTransform,
+    ],
+  );
+
   useLayoutEffect(() => {
     settle();
-  }, [activeIndex, reducedMotion, settle]);
+    return () => {
+      clearPendingSettle();
+    };
+  }, [activeIndex, clearPendingSettle, reducedMotion, settle]);
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
@@ -161,6 +246,10 @@ export function useTabSwipe({
 
   const onPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (pendingTargetIndexRef.current !== null) {
+        return;
+      }
+
       const target = event.target;
       const ignoredTarget =
         target instanceof Element
@@ -284,13 +373,13 @@ export function useTabSwipe({
       }
 
       if (delta === 0) {
-        settle();
+        startTargetSettle(activeIndex);
         return;
       }
 
-      onIndexChange(activeIndex + delta);
+      startTargetSettle(activeIndex + delta);
     },
-    [activeIndex, cancelFrame, onIndexChange, settle, tabCount],
+    [activeIndex, cancelFrame, startTargetSettle, tabCount],
   );
 
   const onPointerCancel = useCallback(
