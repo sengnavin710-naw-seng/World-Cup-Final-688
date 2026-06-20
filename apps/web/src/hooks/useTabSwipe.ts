@@ -6,6 +6,7 @@ import {
 } from "react";
 
 const HORIZONTAL_INTENT_RATIO = 1.2;
+const INTENT_SLOP = 8;
 const DISTANCE_THRESHOLD_RATIO = 0.18;
 const MIN_VELOCITY_DISTANCE = 36;
 const VELOCITY_THRESHOLD = 0.55;
@@ -40,7 +41,8 @@ export function resolveSwipeDelta({
 
   const velocity = horizontalDistance / Math.max(elapsedMs, 1);
   const crossedDistance =
-    horizontalDistance >= Math.max(viewportWidth, 0) * DISTANCE_THRESHOLD_RATIO;
+    viewportWidth > 0 &&
+    horizontalDistance >= viewportWidth * DISTANCE_THRESHOLD_RATIO;
   const crossedVelocity =
     horizontalDistance >= MIN_VELOCITY_DISTANCE && velocity >= VELOCITY_THRESHOLD;
 
@@ -65,6 +67,7 @@ interface UseTabSwipeOptions {
 }
 
 interface ActiveGesture {
+  captured: boolean;
   intent: "horizontal" | "pending" | "vertical";
   pointerId: number;
   startTime: number;
@@ -146,18 +149,28 @@ export function useTabSwipe({
 
   const onPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (activeGestureRef.current) {
+      if (activeGestureRef.current?.captured) {
         return;
       }
 
+      let captured = false;
+      if (typeof event.currentTarget.setPointerCapture === "function") {
+        try {
+          event.currentTarget.setPointerCapture(event.pointerId);
+          captured = true;
+        } catch {
+          captured = false;
+        }
+      }
+
       activeGestureRef.current = {
+        captured,
         intent: "pending",
         pointerId: event.pointerId,
         startTime: event.timeStamp,
         startX: event.clientX,
         startY: event.clientY,
       };
-      event.currentTarget.setPointerCapture(event.pointerId);
 
       if (trackRef.current) {
         trackRef.current.style.transition = "none";
@@ -178,6 +191,10 @@ export function useTabSwipe({
       const distanceY = event.clientY - gesture.startY;
 
       if (gesture.intent === "pending") {
+        if (Math.hypot(distanceX, distanceY) <= INTENT_SLOP) {
+          return;
+        }
+
         gesture.intent =
           Math.abs(distanceX) > Math.abs(distanceY) * HORIZONTAL_INTENT_RATIO
             ? "horizontal"
@@ -215,20 +232,33 @@ export function useTabSwipe({
         return;
       }
 
-      const delta = resolveSwipeDelta({
-        activeIndex,
-        distanceX: event.clientX - gesture.startX,
-        distanceY: event.clientY - gesture.startY,
-        elapsedMs: event.timeStamp - gesture.startTime,
-        tabCount,
-        viewportWidth: viewportRef.current?.clientWidth ?? 0,
-      });
+      const delta =
+        gesture.intent === "vertical"
+          ? 0
+          : resolveSwipeDelta({
+              activeIndex,
+              distanceX: event.clientX - gesture.startX,
+              distanceY: event.clientY - gesture.startY,
+              elapsedMs: event.timeStamp - gesture.startTime,
+              tabCount,
+              viewportWidth: viewportRef.current?.clientWidth ?? 0,
+            });
 
       activeGestureRef.current = null;
       cancelFrame();
 
-      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-        event.currentTarget.releasePointerCapture(event.pointerId);
+      if (
+        gesture.captured &&
+        typeof event.currentTarget.hasPointerCapture === "function" &&
+        typeof event.currentTarget.releasePointerCapture === "function"
+      ) {
+        try {
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }
+        } catch {
+          // Pointer capture may already have been released by the browser.
+        }
       }
 
       if (delta === 0) {
