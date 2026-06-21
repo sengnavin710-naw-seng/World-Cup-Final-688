@@ -8,7 +8,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
 } from "react";
 import { useHomeTabQueries } from "../../hooks/useHomeTabQueries";
 import {
@@ -78,17 +77,12 @@ export function AppShell({
   const tabsRef = useRef<HTMLElement | null>(null);
   const [tabNavigationRequest, setTabNavigationRequest] =
     useState<TabNavigationRequest | null>(null);
-  const [tabMotion, setTabMotion] = useState<TabCarouselMotionState>({
+  const tabMotionRef = useRef<TabCarouselMotionState>({
     pendingIndex: null,
     phase: "idle",
     visualIndex: 0,
   });
-  const tabMotionRef = useRef(tabMotion);
-  tabMotionRef.current = tabMotion;
-  const [tabIndicatorStyle, setTabIndicatorStyle] = useState<CSSProperties>({
-    transform: "translate3d(0px, 0, 0)",
-    width: "0px",
-  });
+  const tabIndicatorRef = useRef<HTMLSpanElement | null>(null);
 
   const selectedTeam = useMemo(
     () =>
@@ -190,6 +184,7 @@ export function AppShell({
   }, [activeIndex]);
 
   const updateTabIndicator = useCallback(() => {
+    const indicator = tabIndicatorRef.current;
     const currentTabMotion = tabMotionRef.current;
     const visualIndex = Math.min(
       Math.max(currentTabMotion.visualIndex, 0),
@@ -201,7 +196,7 @@ export function AppShell({
     const lowerButton = tabRefs.current[lowerIndex];
     const upperButton = tabRefs.current[upperIndex] || lowerButton;
 
-    if (!lowerButton || !upperButton) {
+    if (!indicator || !lowerButton || !upperButton) {
       return;
     }
 
@@ -219,26 +214,30 @@ export function AppShell({
         : "transform 300ms cubic-bezier(0.4, 0, 0.2, 1), width 300ms cubic-bezier(0.4, 0, 0.2, 1)";
     const indicatorWidth = `${width}px`;
 
-    setTabIndicatorStyle((currentStyle) => {
-      if (
-        currentStyle.transform === transform &&
-        currentStyle.transition === transition &&
-        currentStyle.width === indicatorWidth
-      ) {
-        return currentStyle;
-      }
+    if (indicator.style.transform !== transform) {
+      indicator.style.transform = transform;
+    }
 
-      return {
-        transform,
-        transition,
-        width: indicatorWidth,
-      };
-    });
+    if (indicator.style.transition !== transition) {
+      indicator.style.transition = transition;
+    }
+
+    if (indicator.style.width !== indicatorWidth) {
+      indicator.style.width = indicatorWidth;
+    }
   }, [prefersReducedMotion]);
+
+  const handleTabMotionStateChange = useCallback(
+    (nextTabMotion: TabCarouselMotionState) => {
+      tabMotionRef.current = nextTabMotion;
+      updateTabIndicator();
+    },
+    [updateTabIndicator],
+  );
 
   useLayoutEffect(() => {
     updateTabIndicator();
-  }, [tabMotion.phase, tabMotion.visualIndex, updateTabIndicator]);
+  }, [activeIndex, updateTabIndicator]);
 
   useLayoutEffect(() => {
     const tabsElement = tabsRef.current;
@@ -531,7 +530,7 @@ export function AppShell({
             <span
               aria-hidden="true"
               className="tab-indicator"
-              style={tabIndicatorStyle}
+              ref={tabIndicatorRef}
             />
           </nav>
         </section>
@@ -540,7 +539,7 @@ export function AppShell({
           activeIndex={activeIndex}
           navigationRequest={tabNavigationRequest}
           onActiveIndexChange={setActiveIndex}
-          onMotionStateChange={setTabMotion}
+          onMotionStateChange={handleTabMotionStateChange}
           reducedMotion={prefersReducedMotion}
           renderTab={(tab) => (
             <>
