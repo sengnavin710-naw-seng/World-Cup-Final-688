@@ -127,6 +127,7 @@ function MotionStateHarness({
       { "data-testid": "pending-index" },
       String(swipe.pendingIndex),
     ),
+    createElement("output", { "data-testid": "phase" }, swipe.phase),
     createElement(
       "button",
       {
@@ -148,6 +149,37 @@ function MotionStateHarness({
         "data-testid": "swipe-track",
         ref: swipe.trackRef,
       }),
+    ),
+  );
+}
+
+function NoTrackMotionStateHarness({
+  onIndexChange,
+}: {
+  onIndexChange: (nextIndex: number) => void;
+}) {
+  const swipe = useTabSwipe({
+    activeIndex: 1,
+    onIndexChange,
+    reducedMotion: false,
+    tabCount: 4,
+  });
+
+  return createElement(
+    "div",
+    {},
+    createElement(
+      "output",
+      { "data-testid": "pending-index" },
+      String(swipe.pendingIndex),
+    ),
+    createElement("output", { "data-testid": "phase" }, swipe.phase),
+    createElement(
+      "button",
+      {
+        onClick: () => swipe.settleToIndex(1),
+      },
+      "Settle current",
     ),
   );
 }
@@ -519,6 +551,8 @@ describe("useTabSwipe", () => {
 
     setNonCapturingPointerApi(viewport);
 
+    expect(screen.getByTestId("phase")).toHaveTextContent("idle");
+
     firePointerEvent(viewport, "pointerdown", {
       clientX: 300,
       clientY: 120,
@@ -532,6 +566,7 @@ describe("useTabSwipe", () => {
 
     frameClock.advance(16);
 
+    expect(screen.getByTestId("phase")).toHaveTextContent("dragging");
     expect(screen.getByTestId("visual-index")).toHaveTextContent("1.25");
     expect(track.style.transform).toBe("translate3d(-500px, 0, 0)");
     expect(onIndexChange).not.toHaveBeenCalled();
@@ -546,6 +581,7 @@ describe("useTabSwipe", () => {
 
     expect(screen.getByTestId("visual-index")).toHaveTextContent("3");
     expect(screen.getByTestId("pending-index")).toHaveTextContent("3");
+    expect(screen.getByTestId("phase")).toHaveTextContent("settling");
     expect(track.style.transform).toBe("translate3d(-1200px, 0, 0)");
     expect(track.style.transition).toBe(
       "transform 300ms cubic-bezier(0.4, 0, 0.2, 1)",
@@ -556,6 +592,7 @@ describe("useTabSwipe", () => {
 
     expect(onIndexChange).toHaveBeenCalledWith(3);
     expect(screen.getByTestId("pending-index")).toHaveTextContent("null");
+    expect(screen.getByTestId("phase")).toHaveTextContent("idle");
   });
 
   test("commits a far clicked tab immediately with reduced motion", () => {
@@ -572,7 +609,19 @@ describe("useTabSwipe", () => {
 
     expect(onIndexChange).toHaveBeenCalledWith(3);
     expect(screen.getByTestId("visual-index")).toHaveTextContent("3");
+    expect(screen.getByTestId("phase")).toHaveTextContent("idle");
     expect(track.style.transition).toBe("none");
+  });
+
+  test("keeps motion state idle when settling without a track", () => {
+    const onIndexChange = vi.fn();
+    render(createElement(NoTrackMotionStateHarness, { onIndexChange }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Settle current" }));
+
+    expect(screen.getByTestId("pending-index")).toHaveTextContent("null");
+    expect(screen.getByTestId("phase")).toHaveTextContent("idle");
+    expect(onIndexChange).not.toHaveBeenCalled();
   });
 
   test("settles an accepted swipe before committing navigation", () => {

@@ -187,8 +187,6 @@ export function useTabSwipe({
       const track = trackRef.current;
 
       clearPendingSettle();
-      setPendingIndex(targetIndex);
-      setPhase("settling");
 
       if (reducedMotion) {
         setTransform(targetIndex, 0, false);
@@ -203,6 +201,8 @@ export function useTabSwipe({
 
       if (targetIndex === activeIndex) {
         if (!track) {
+          setPendingIndex(null);
+          setPhase("idle");
           return;
         }
 
@@ -216,6 +216,8 @@ export function useTabSwipe({
 
         pendingTargetIndexRef.current = targetIndex;
         pendingShouldCommitRef.current = false;
+        setPendingIndex(targetIndex);
+        setPhase("settling");
         pendingTransitionEndTargetRef.current = track;
         pendingTransitionEndListenerRef.current = handleTransitionEnd;
 
@@ -228,6 +230,8 @@ export function useTabSwipe({
       }
 
       if (!track) {
+        setPendingIndex(null);
+        setPhase("idle");
         onIndexChange(targetIndex);
         return;
       }
@@ -242,6 +246,8 @@ export function useTabSwipe({
 
       pendingTargetIndexRef.current = targetIndex;
       pendingShouldCommitRef.current = true;
+      setPendingIndex(targetIndex);
+      setPhase("settling");
       pendingTransitionEndTargetRef.current = track;
       pendingTransitionEndListenerRef.current = handleTransitionEnd;
 
