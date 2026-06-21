@@ -199,6 +199,7 @@ export function useTabSwipe({
 
       if (targetIndex === activeIndex) {
         if (!track) {
+          publishVisualIndex(targetIndex);
           setPendingIndex(null);
           setPhase("idle");
           return;

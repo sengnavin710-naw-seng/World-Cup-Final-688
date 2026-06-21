@@ -196,6 +196,62 @@ function NoTrackMotionStateHarness({
   );
 }
 
+function StaleVisualNoTrackHarness({
+  onSwipe,
+  onIndexChange,
+}: {
+  onSwipe: (swipe: ReturnType<typeof useTabSwipe>) => void;
+  onIndexChange: (nextIndex: number) => void;
+}) {
+  const swipe = useTabSwipe({
+    activeIndex: 1,
+    onIndexChange,
+    reducedMotion: false,
+    tabCount: 4,
+  });
+  onSwipe(swipe);
+
+  const setViewportRef = (node: HTMLDivElement | null) => {
+    if (node) {
+      setViewportWidth(node, 400);
+    }
+
+    (swipe.viewportRef as MutableRefObject<HTMLDivElement | null>).current =
+      node;
+  };
+
+  return createElement(
+    "div",
+    {},
+    createElement(
+      "output",
+      { "data-testid": "pending-index" },
+      String(swipe.pendingIndex),
+    ),
+    createElement(
+      "output",
+      { "data-testid": "visual-index" },
+      String(swipe.visualIndex),
+    ),
+    createElement("output", { "data-testid": "phase" }, swipe.phase),
+    createElement(
+      "div",
+      {
+        "data-testid": "swipe-viewport",
+        onPointerCancel: swipe.onPointerCancel,
+        onPointerDown: swipe.onPointerDown,
+        onPointerMove: swipe.onPointerMove,
+        onPointerUp: swipe.onPointerUp,
+        ref: setViewportRef,
+      },
+      createElement("div", {
+        "data-testid": "swipe-track",
+        ref: swipe.trackRef,
+      }),
+    ),
+  );
+}
+
 function ExternalSelectionHarness({
   onIndexChange,
 }: {
@@ -646,6 +702,59 @@ describe("useTabSwipe", () => {
     expect(screen.getByTestId("visual-index")).toHaveTextContent("3");
     expect(screen.getByTestId("pending-index")).toHaveTextContent("null");
     expect(screen.getByTestId("phase")).toHaveTextContent("idle");
+  });
+
+  test("restores visual index when settling to the current tab without a track", () => {
+    const frameClock = installAnimationFrameClock();
+    const onIndexChange = vi.fn();
+    let latestSwipe: ReturnType<typeof useTabSwipe> | null = null;
+    render(
+      createElement(StaleVisualNoTrackHarness, {
+        onIndexChange,
+        onSwipe: (swipe) => {
+          latestSwipe = swipe;
+        },
+      }),
+    );
+    const viewport = screen.getByTestId("swipe-viewport");
+
+    setNonCapturingPointerApi(viewport);
+
+    firePointerEvent(viewport, "pointerdown", {
+      clientX: 300,
+      clientY: 120,
+      pointerId: 22,
+    });
+    firePointerEvent(viewport, "pointermove", {
+      clientX: 200,
+      clientY: 122,
+      pointerId: 22,
+    });
+    frameClock.advance(16);
+
+    expect(screen.getByTestId("visual-index")).toHaveTextContent("1.25");
+
+    if (!latestSwipe) {
+      throw new Error("Expected swipe state to be captured");
+    }
+
+    act(() => {
+      (
+        latestSwipe.trackRef as MutableRefObject<HTMLDivElement | null>
+      ).current = null;
+    });
+
+    expect(latestSwipe.trackRef.current).toBeNull();
+    expect(screen.getByTestId("visual-index")).toHaveTextContent("1.25");
+
+    act(() => {
+      latestSwipe.settleToIndex(1);
+    });
+
+    expect(screen.getByTestId("visual-index")).toHaveTextContent("1");
+    expect(screen.getByTestId("pending-index")).toHaveTextContent("null");
+    expect(screen.getByTestId("phase")).toHaveTextContent("idle");
+    expect(onIndexChange).not.toHaveBeenCalled();
   });
 
   test("settles an accepted swipe before committing navigation", () => {
