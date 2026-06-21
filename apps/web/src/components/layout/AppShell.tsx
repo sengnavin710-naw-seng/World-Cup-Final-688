@@ -83,6 +83,8 @@ export function AppShell({
     phase: "idle",
     visualIndex: 0,
   });
+  const tabMotionRef = useRef(tabMotion);
+  tabMotionRef.current = tabMotion;
   const [tabIndicatorStyle, setTabIndicatorStyle] = useState<CSSProperties>({
     transform: "translate3d(0px, 0, 0)",
     width: "0px",
@@ -187,9 +189,10 @@ export function AppShell({
     }
   }, [activeIndex]);
 
-  useLayoutEffect(() => {
+  const updateTabIndicator = useCallback(() => {
+    const currentTabMotion = tabMotionRef.current;
     const visualIndex = Math.min(
-      Math.max(tabMotion.visualIndex, 0),
+      Math.max(currentTabMotion.visualIndex, 0),
       tabs.length - 1,
     );
     const lowerIndex = Math.floor(visualIndex);
@@ -209,15 +212,51 @@ export function AppShell({
       lowerButton.offsetWidth +
       (upperButton.offsetWidth - lowerButton.offsetWidth) * progress;
 
-    setTabIndicatorStyle({
-      transform: `translate3d(${left}px, 0, 0)`,
-      transition:
-        tabMotion.phase === "dragging"
-          ? "none"
-          : "transform 300ms cubic-bezier(0.4, 0, 0.2, 1), width 300ms cubic-bezier(0.4, 0, 0.2, 1)",
-      width: `${width}px`,
+    const transform = `translate3d(${left}px, 0, 0)`;
+    const transition =
+      currentTabMotion.phase === "dragging"
+        ? "none"
+        : "transform 300ms cubic-bezier(0.4, 0, 0.2, 1), width 300ms cubic-bezier(0.4, 0, 0.2, 1)";
+    const indicatorWidth = `${width}px`;
+
+    setTabIndicatorStyle((currentStyle) => {
+      if (
+        currentStyle.transform === transform &&
+        currentStyle.transition === transition &&
+        currentStyle.width === indicatorWidth
+      ) {
+        return currentStyle;
+      }
+
+      return {
+        transform,
+        transition,
+        width: indicatorWidth,
+      };
     });
-  }, [tabMotion.phase, tabMotion.visualIndex]);
+  }, []);
+
+  useLayoutEffect(() => {
+    updateTabIndicator();
+  }, [tabMotion.phase, tabMotion.visualIndex, updateTabIndicator]);
+
+  useLayoutEffect(() => {
+    const tabsElement = tabsRef.current;
+
+    if (!tabsElement || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const resizeObserver = new ResizeObserver(updateTabIndicator);
+    resizeObserver.observe(tabsElement);
+    tabRefs.current.forEach((button) => {
+      if (button) {
+        resizeObserver.observe(button);
+      }
+    });
+
+    return () => resizeObserver.disconnect();
+  }, [updateTabIndicator]);
 
   const renderTabContent = (tab: HomeTab) => {
     if (tab === "Knockout") {

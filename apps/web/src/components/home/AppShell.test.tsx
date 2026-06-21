@@ -10,6 +10,36 @@ import {
 import App from "../../App";
 import { renderWithQueryClient as render } from "../../test/renderWithQueryClient";
 
+class ControlledResizeObserver implements ResizeObserver {
+  readonly observedTargets = new Set<Element>();
+
+  constructor(private readonly callback: ResizeObserverCallback) {
+    controlledResizeObservers.push(this);
+  }
+
+  disconnect = vi.fn(() => {
+    this.observedTargets.clear();
+  });
+
+  observe = vi.fn((target: Element) => {
+    this.observedTargets.add(target);
+  });
+
+  unobserve = vi.fn((target: Element) => {
+    this.observedTargets.delete(target);
+  });
+
+  trigger(target: Element) {
+    if (!this.observedTargets.has(target)) {
+      return;
+    }
+
+    this.callback([{ target } as ResizeObserverEntry], this);
+  }
+}
+
+let controlledResizeObservers: ControlledResizeObserver[] = [];
+
 function deferredResponse() {
   let resolve!: (response: Response) => void;
   const promise = new Promise<Response>((resolver) => {
@@ -43,6 +73,8 @@ function fireTransitionEndEvent(target: HTMLElement, propertyName: string) {
 }
 
 beforeEach(() => {
+  controlledResizeObservers = [];
+  vi.stubGlobal("ResizeObserver", ControlledResizeObserver);
   setReducedMotionPreference(false);
   Object.defineProperty(window, "requestIdleCallback", {
     configurable: true,
@@ -260,6 +292,32 @@ test("renders one shared tab indicator instead of per-button underlines", async 
   expect(tabsNav.querySelector(".tab-indicator")).toBeInTheDocument();
   expect(applicationStyles).toContain(".tab-indicator");
   expect(applicationStyles).not.toContain(".tab-button::after");
+});
+
+test("recalculates the shared tab indicator when the tab row layout changes", async () => {
+  render(<App />);
+  await screen.findByLabelText("World Cup knockout bracket");
+
+  const tabsNav = screen.getByLabelText("Home tabs");
+  const knockoutTab = screen.getByRole("tab", { name: "Knockout" });
+  const indicator = tabsNav.querySelector<HTMLElement>(".tab-indicator");
+
+  Object.defineProperties(knockoutTab, {
+    offsetLeft: { configurable: true, value: 18 },
+    offsetWidth: { configurable: true, value: 124 },
+  });
+
+  const tabsObserver = controlledResizeObservers.find((observer) =>
+    observer.observedTargets.has(tabsNav),
+  );
+
+  expect(tabsObserver).toBeDefined();
+  act(() => tabsObserver?.trigger(tabsNav));
+
+  expect(indicator).toHaveStyle({
+    transform: "translate3d(18px, 0, 0)",
+    width: "124px",
+  });
 });
 
 test("clicking a far tab keeps the current tab selected until carousel settle ends", async () => {
