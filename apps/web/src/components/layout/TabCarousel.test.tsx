@@ -62,6 +62,39 @@ function Harness({ reducedMotion = false }: { reducedMotion?: boolean }) {
   );
 }
 
+function RequestHarness() {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [requestId, setRequestId] = useState(0);
+  const [motionText, setMotionText] = useState("0:null:idle");
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setRequestId((current) => current + 1)}
+      >
+        Request News
+      </button>
+      <output data-testid="motion-state">{motionText}</output>
+      <TabCarousel
+        activeIndex={activeIndex}
+        navigationRequest={
+          requestId > 0 ? { id: requestId, index: 3 } : null
+        }
+        onActiveIndexChange={setActiveIndex}
+        onMotionStateChange={(state) =>
+          setMotionText(
+            `${state.visualIndex}:${state.pendingIndex}:${state.phase}`,
+          )
+        }
+        reducedMotion={false}
+        renderTab={(tab: HomeTab) => <div>{`${tab} content`}</div>}
+        tabs={tabs}
+      />
+    </>
+  );
+}
+
 function setViewportWidth(viewport: HTMLElement, width: number) {
   Object.defineProperty(viewport, "clientWidth", {
     configurable: true,
@@ -253,5 +286,44 @@ describe("TabCarousel", () => {
     expect(screen.getByTestId("tab-carousel-track")).toHaveStyle({
       transition: "none",
     });
+  });
+
+  test("animates a far navigation request without committing early", () => {
+    render(<RequestHarness />);
+    const viewport = screen.getByLabelText("Tournament tabs");
+    const track = screen.getByTestId("tab-carousel-track");
+    setViewportWidth(viewport, 390);
+
+    fireEvent.click(screen.getByRole("button", { name: "Request News" }));
+
+    expect(track.style.transform).toBe("translate3d(-1170px, 0, 0)");
+    expect(track.style.transition).toBe(
+      "transform 300ms cubic-bezier(0.4, 0, 0.2, 1)",
+    );
+    expect(screen.getByTestId("motion-state")).toHaveTextContent(
+      "3:3:settling",
+    );
+    expect(screen.getByTestId("tab-slide-Knockout")).not.toHaveAttribute(
+      "aria-hidden",
+    );
+
+    fireTransitionEndEvent(track, "transform");
+
+    expect(screen.getByTestId("tab-slide-News")).not.toHaveAttribute(
+      "aria-hidden",
+    );
+  });
+
+  test("mounts source, target, and target neighbor slides while settling", () => {
+    render(<RequestHarness />);
+    const viewport = screen.getByLabelText("Tournament tabs");
+    setViewportWidth(viewport, 390);
+
+    fireEvent.click(screen.getByRole("button", { name: "Request News" }));
+
+    expect(screen.getByText("Knockout content")).toBeInTheDocument();
+    expect(screen.getByText("Fixtures content")).toBeInTheDocument();
+    expect(screen.getByText("Table content")).toBeInTheDocument();
+    expect(screen.getByText("News content")).toBeInTheDocument();
   });
 });
