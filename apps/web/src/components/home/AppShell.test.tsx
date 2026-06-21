@@ -36,6 +36,12 @@ function setReducedMotionPreference(matches: boolean) {
   });
 }
 
+function fireTransitionEndEvent(target: HTMLElement, propertyName: string) {
+  const event = new Event("transitionend", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "propertyName", { value: propertyName });
+  fireEvent(target, event);
+}
+
 beforeEach(() => {
   setReducedMotionPreference(false);
   Object.defineProperty(window, "requestIdleCallback", {
@@ -244,6 +250,45 @@ test("prefetches the destination on tab focus", async () => {
   });
 });
 
+test("renders one shared tab indicator instead of per-button underlines", async () => {
+  render(<App />);
+  await screen.findByLabelText("World Cup knockout bracket");
+
+  const tabsNav = screen.getByLabelText("Home tabs");
+  const applicationStyles = readFileSync("src/styles.css", "utf8");
+
+  expect(tabsNav.querySelector(".tab-indicator")).toBeInTheDocument();
+  expect(applicationStyles).toContain(".tab-indicator");
+  expect(applicationStyles).not.toContain(".tab-button::after");
+});
+
+test("clicking a far tab keeps the current tab selected until carousel settle ends", async () => {
+  render(<App />);
+  await screen.findByLabelText("World Cup knockout bracket");
+
+  const track = screen.getByTestId("tab-carousel-track");
+  const viewport = screen.getByLabelText("Tournament tabs");
+  Object.defineProperty(viewport, "clientWidth", {
+    configurable: true,
+    value: 390,
+  });
+
+  fireEvent.click(screen.getByRole("tab", { name: "News" }));
+
+  expect(track.style.transform).toBe("translate3d(-1170px, 0, 0)");
+  expect(screen.getByRole("tab", { name: "Knockout" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+
+  fireTransitionEndEvent(track, "transform");
+
+  expect(screen.getByRole("tab", { name: "News" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+});
+
 test("uses local loading and error states when a tab has no cached data", async () => {
   const pendingNews = deferredResponse();
   const currentFetch = global.fetch;
@@ -378,6 +423,7 @@ test("moves from the knockout bracket to fixtures after a very fast forward swip
   render(<App />);
 
   const mobileBracket = await screen.findByLabelText("World Cup knockout rounds");
+  const track = screen.getByTestId("tab-carousel-track");
   const scroller = mobileBracket.querySelector(".knockout-mobile-bracket-scroll");
   expect(scroller).toBeInstanceOf(HTMLDivElement);
 
@@ -404,6 +450,8 @@ test("moves from the knockout bracket to fixtures after a very fast forward swip
   });
   Object.defineProperty(touchEnd, "timeStamp", { value: 1_100 });
   fireEvent(scroller!, touchEnd);
+
+  fireTransitionEndEvent(track, "transform");
 
   expect(screen.getByRole("tab", { name: "Fixtures" })).toHaveAttribute(
     "aria-selected",

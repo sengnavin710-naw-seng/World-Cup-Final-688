@@ -4,9 +4,11 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
 } from "react";
 import { useHomeTabQueries } from "../../hooks/useHomeTabQueries";
 import {
@@ -22,7 +24,11 @@ import {
 import { BrandHeader } from "../ui/BrandHeader";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { NotificationPanel } from "../ui/NotificationPanel";
-import { TabCarousel } from "./TabCarousel";
+import {
+  TabCarousel,
+  type TabCarouselMotionState,
+  type TabNavigationRequest,
+} from "./TabCarousel";
 import { TabErrorBoundary } from "./TabErrorBoundary";
 import { TabLoadState, TabRefreshNotice } from "./TabLoadState";
 import {
@@ -69,6 +75,18 @@ export function AppShell({
   const [resetError, setResetError] = useState("");
   const [resetting, setResetting] = useState(false);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const tabsRef = useRef<HTMLElement | null>(null);
+  const [tabNavigationRequest, setTabNavigationRequest] =
+    useState<TabNavigationRequest | null>(null);
+  const [tabMotion, setTabMotion] = useState<TabCarouselMotionState>({
+    pendingIndex: null,
+    phase: "idle",
+    visualIndex: 0,
+  });
+  const [tabIndicatorStyle, setTabIndicatorStyle] = useState<CSSProperties>({
+    transform: "translate3d(0px, 0, 0)",
+    width: "0px",
+  });
 
   const selectedTeam = useMemo(
     () =>
@@ -97,6 +115,23 @@ export function AppShell({
       ]).catch(() => undefined);
     },
     [queryClient],
+  );
+
+  const requestTabNavigation = useCallback(
+    (index: number) => {
+      const targetTab = tabs[index];
+
+      if (!targetTab || index === activeIndex) {
+        return;
+      }
+
+      prefetchTab(targetTab);
+      setTabNavigationRequest((current) => ({
+        id: (current ? current.id : 0) + 1,
+        index,
+      }));
+    },
+    [activeIndex, prefetchTab],
   );
 
   useEffect(() => {
@@ -152,6 +187,38 @@ export function AppShell({
     }
   }, [activeIndex]);
 
+  useLayoutEffect(() => {
+    const visualIndex = Math.min(
+      Math.max(tabMotion.visualIndex, 0),
+      tabs.length - 1,
+    );
+    const lowerIndex = Math.floor(visualIndex);
+    const upperIndex = Math.min(lowerIndex + 1, tabs.length - 1);
+    const progress = visualIndex - lowerIndex;
+    const lowerButton = tabRefs.current[lowerIndex];
+    const upperButton = tabRefs.current[upperIndex] || lowerButton;
+
+    if (!lowerButton || !upperButton) {
+      return;
+    }
+
+    const left =
+      lowerButton.offsetLeft +
+      (upperButton.offsetLeft - lowerButton.offsetLeft) * progress;
+    const width =
+      lowerButton.offsetWidth +
+      (upperButton.offsetWidth - lowerButton.offsetWidth) * progress;
+
+    setTabIndicatorStyle({
+      transform: `translate3d(${left}px, 0, 0)`,
+      transition:
+        tabMotion.phase === "dragging"
+          ? "none"
+          : "transform 300ms cubic-bezier(0.4, 0, 0.2, 1), width 300ms cubic-bezier(0.4, 0, 0.2, 1)",
+      width: `${width}px`,
+    });
+  }, [tabMotion.phase, tabMotion.visualIndex]);
+
   const renderTabContent = (tab: HomeTab) => {
     if (tab === "Knockout") {
       if (!queries.knockout.data) {
@@ -175,7 +242,7 @@ export function AppShell({
             />
           ) : null}
           <LazyKnockoutTab
-            onFastForwardSwipe={() => setActiveIndex(1)}
+            onFastForwardSwipe={() => requestTabNavigation(1)}
             rounds={queries.knockout.data}
             teams={queries.teams.data ?? []}
           />
@@ -404,7 +471,7 @@ export function AppShell({
             </div>
           </header>
 
-          <nav aria-label="Home tabs" className="tabs">
+          <nav aria-label="Home tabs" className="tabs" ref={tabsRef}>
             {tabs.map((tab, index) => (
               <button
                 key={tab}
@@ -415,19 +482,26 @@ export function AppShell({
                 className="tab-button"
                 role="tab"
                 type="button"
-                onClick={() => setActiveIndex(index)}
+                onClick={() => requestTabNavigation(index)}
                 onFocus={() => prefetchTab(tab)}
                 onPointerDown={() => prefetchTab(tab)}
               >
                 {tab}
               </button>
             ))}
+            <span
+              aria-hidden="true"
+              className="tab-indicator"
+              style={tabIndicatorStyle}
+            />
           </nav>
         </section>
 
         <TabCarousel
           activeIndex={activeIndex}
+          navigationRequest={tabNavigationRequest}
           onActiveIndexChange={setActiveIndex}
+          onMotionStateChange={setTabMotion}
           reducedMotion={prefersReducedMotion}
           renderTab={(tab) => (
             <>
