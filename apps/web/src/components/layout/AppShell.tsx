@@ -214,7 +214,7 @@ export function AppShell({
 
     const transform = `translate3d(${left}px, 0, 0)`;
     const transition =
-      currentTabMotion.phase === "dragging"
+      prefersReducedMotion || currentTabMotion.phase === "dragging"
         ? "none"
         : "transform 300ms cubic-bezier(0.4, 0, 0.2, 1), width 300ms cubic-bezier(0.4, 0, 0.2, 1)";
     const indicatorWidth = `${width}px`;
@@ -234,7 +234,7 @@ export function AppShell({
         width: indicatorWidth,
       };
     });
-  }, []);
+  }, [prefersReducedMotion]);
 
   useLayoutEffect(() => {
     updateTabIndicator();

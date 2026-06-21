@@ -320,6 +320,18 @@ test("recalculates the shared tab indicator when the tab row layout changes", as
   });
 });
 
+test("disables the shared tab indicator transition for reduced motion", async () => {
+  setReducedMotionPreference(true);
+  render(<App />);
+  await screen.findByLabelText("World Cup knockout bracket");
+
+  const indicator = screen
+    .getByLabelText("Home tabs")
+    .querySelector<HTMLElement>(".tab-indicator");
+
+  expect(indicator).toHaveStyle({ transition: "none" });
+});
+
 test("clicking a far tab keeps the current tab selected until carousel settle ends", async () => {
   render(<App />);
   await screen.findByLabelText("World Cup knockout bracket");
