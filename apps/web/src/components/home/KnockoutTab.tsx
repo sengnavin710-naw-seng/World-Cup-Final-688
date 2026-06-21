@@ -1285,6 +1285,7 @@ export function KnockoutTab({
 
         <div
           className="knockout-mobile-bracket-scroll"
+          data-tab-swipe-escape="strong"
           data-tab-swipe-ignore="true"
           ref={mobileBoardScrollRef}
           onScroll={(event) => handleMobileBracketScroll(event.currentTarget)}

@@ -40,6 +40,15 @@ function SwipeHarness({
       },
       "Nested scroll area",
     ),
+    createElement(
+      "div",
+      {
+        "data-tab-swipe-escape": "strong",
+        "data-tab-swipe-ignore": "true",
+        "data-testid": "strong-escape-area",
+      },
+      "Strong escape area",
+    ),
   );
 }
 
@@ -707,12 +716,14 @@ describe("useTabSwipe", () => {
   test("restores visual index when settling to the current tab without a track", () => {
     const frameClock = installAnimationFrameClock();
     const onIndexChange = vi.fn();
-    let latestSwipe: ReturnType<typeof useTabSwipe> | null = null;
+    const latestSwipeRef: {
+      current: ReturnType<typeof useTabSwipe> | null;
+    } = { current: null };
     render(
       createElement(StaleVisualNoTrackHarness, {
         onIndexChange,
         onSwipe: (swipe) => {
-          latestSwipe = swipe;
+          latestSwipeRef.current = swipe;
         },
       }),
     );
@@ -733,6 +744,8 @@ describe("useTabSwipe", () => {
     frameClock.advance(16);
 
     expect(screen.getByTestId("visual-index")).toHaveTextContent("1.25");
+
+    const latestSwipe = latestSwipeRef.current;
 
     if (!latestSwipe) {
       throw new Error("Expected swipe state to be captured");
@@ -1218,6 +1231,30 @@ describe("useTabSwipe", () => {
       clientX: 80,
       clientY: 202,
       pointerId: 5,
+    });
+
+    expect(onIndexChange).not.toHaveBeenCalled();
+  });
+
+  test("still ignores strong escape areas at the parent pointer layer", () => {
+    const onIndexChange = vi.fn();
+    render(createElement(SwipeHarness, { onIndexChange }));
+    const strongEscapeArea = screen.getByTestId("strong-escape-area");
+
+    firePointerEvent(strongEscapeArea, "pointerdown", {
+      clientX: 300,
+      clientY: 200,
+      pointerId: 22,
+    });
+    firePointerEvent(strongEscapeArea, "pointermove", {
+      clientX: 20,
+      clientY: 202,
+      pointerId: 22,
+    });
+    firePointerEvent(strongEscapeArea, "pointerup", {
+      clientX: 20,
+      clientY: 202,
+      pointerId: 22,
     });
 
     expect(onIndexChange).not.toHaveBeenCalled();

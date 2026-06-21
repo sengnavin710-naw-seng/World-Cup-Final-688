@@ -1115,12 +1115,14 @@ test("does not snap back to the top after a vertical mobile bracket scroll", () 
   );
 });
 
-test("marks the mobile bracket scroller as independent from parent tab swipes", () => {
+test("marks the mobile bracket scroller as a strong home-tab escape zone", () => {
   render(<KnockoutTab rounds={fullMobileRounds} teams={[]} />);
-  const mobileBracket = screen.getByLabelText("World Cup knockout rounds");
-  const scroller = mobileBracket.querySelector(".knockout-mobile-bracket-scroll");
+  const scroller = screen
+    .getByLabelText("World Cup knockout rounds")
+    .querySelector(".knockout-mobile-bracket-scroll");
 
   expect(scroller).toHaveAttribute("data-tab-swipe-ignore", "true");
+  expect(scroller).toHaveAttribute("data-tab-swipe-escape", "strong");
 });
 
 test("uses compact card sizing for the knockout bracket", () => {
