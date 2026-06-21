@@ -1,3 +1,4 @@
+import "@testing-library/jest-dom/vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { createElement, useState, type MutableRefObject } from "react";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -83,6 +84,71 @@ function SettlingSwipeHarness({
       "data-testid": "swipe-track",
       ref: swipe.trackRef,
     }),
+  );
+}
+
+function MotionStateHarness({
+  onIndexChange,
+  reducedMotion = false,
+}: {
+  onIndexChange: (nextIndex: number) => void;
+  reducedMotion?: boolean;
+}) {
+  const [activeIndex, setActiveIndex] = useState(1);
+  const swipe = useTabSwipe({
+    activeIndex,
+    onIndexChange: (nextIndex) => {
+      onIndexChange(nextIndex);
+      setActiveIndex(nextIndex);
+    },
+    reducedMotion,
+    tabCount: 4,
+  });
+
+  const setViewportRef = (node: HTMLDivElement | null) => {
+    if (node) {
+      setViewportWidth(node, 400);
+    }
+
+    (swipe.viewportRef as MutableRefObject<HTMLDivElement | null>).current =
+      node;
+  };
+
+  return createElement(
+    "div",
+    {},
+    createElement(
+      "output",
+      { "data-testid": "visual-index" },
+      String(swipe.visualIndex),
+    ),
+    createElement(
+      "output",
+      { "data-testid": "pending-index" },
+      String(swipe.pendingIndex),
+    ),
+    createElement(
+      "button",
+      {
+        onClick: () => swipe.settleToIndex(3),
+      },
+      "Go to News",
+    ),
+    createElement(
+      "div",
+      {
+        "data-testid": "swipe-viewport",
+        onPointerCancel: swipe.onPointerCancel,
+        onPointerDown: swipe.onPointerDown,
+        onPointerMove: swipe.onPointerMove,
+        onPointerUp: swipe.onPointerUp,
+        ref: setViewportRef,
+      },
+      createElement("div", {
+        "data-testid": "swipe-track",
+        ref: swipe.trackRef,
+      }),
+    ),
   );
 }
 
@@ -444,6 +510,71 @@ describe("resolveSwipeDelta", () => {
 });
 
 describe("useTabSwipe", () => {
+  test("reports fractional visual index while dragging", () => {
+    const frameClock = installAnimationFrameClock();
+    const onIndexChange = vi.fn();
+    render(createElement(MotionStateHarness, { onIndexChange }));
+    const viewport = screen.getByTestId("swipe-viewport");
+    const track = screen.getByTestId("swipe-track");
+
+    setNonCapturingPointerApi(viewport);
+
+    firePointerEvent(viewport, "pointerdown", {
+      clientX: 300,
+      clientY: 120,
+      pointerId: 21,
+    });
+    firePointerEvent(viewport, "pointermove", {
+      clientX: 200,
+      clientY: 122,
+      pointerId: 21,
+    });
+
+    frameClock.advance(16);
+
+    expect(screen.getByTestId("visual-index")).toHaveTextContent("1.25");
+    expect(track.style.transform).toBe("translate3d(-500px, 0, 0)");
+    expect(onIndexChange).not.toHaveBeenCalled();
+  });
+
+  test("settles to a far clicked tab before committing active index", () => {
+    const onIndexChange = vi.fn();
+    render(createElement(MotionStateHarness, { onIndexChange }));
+    const track = screen.getByTestId("swipe-track");
+
+    fireEvent.click(screen.getByRole("button", { name: "Go to News" }));
+
+    expect(screen.getByTestId("visual-index")).toHaveTextContent("3");
+    expect(screen.getByTestId("pending-index")).toHaveTextContent("3");
+    expect(track.style.transform).toBe("translate3d(-1200px, 0, 0)");
+    expect(track.style.transition).toBe(
+      "transform 300ms cubic-bezier(0.4, 0, 0.2, 1)",
+    );
+    expect(onIndexChange).not.toHaveBeenCalled();
+
+    fireTransitionEndEvent(track, "transform");
+
+    expect(onIndexChange).toHaveBeenCalledWith(3);
+    expect(screen.getByTestId("pending-index")).toHaveTextContent("null");
+  });
+
+  test("commits a far clicked tab immediately with reduced motion", () => {
+    const onIndexChange = vi.fn();
+    render(
+      createElement(MotionStateHarness, {
+        onIndexChange,
+        reducedMotion: true,
+      }),
+    );
+    const track = screen.getByTestId("swipe-track");
+
+    fireEvent.click(screen.getByRole("button", { name: "Go to News" }));
+
+    expect(onIndexChange).toHaveBeenCalledWith(3);
+    expect(screen.getByTestId("visual-index")).toHaveTextContent("3");
+    expect(track.style.transition).toBe("none");
+  });
+
   test("settles an accepted swipe before committing navigation", () => {
     const onIndexChange = vi.fn();
     render(createElement(SettlingSwipeHarness, { onIndexChange }));
