@@ -97,7 +97,6 @@ export function useTabSwipe({
   const pendingTransitionEndTargetRef = useRef<HTMLDivElement | null>(null);
   const pendingTimeoutRef = useRef<number | null>(null);
   const observedViewportWidthRef = useRef<number | null>(null);
-  const visualIndexRef = useRef(activeIndex);
   const [visualIndex, setVisualIndex] = useState(activeIndex);
   const [pendingIndex, setPendingIndex] = useState<number | null>(null);
   const [phase, setPhase] = useState<TabSwipePhase>("idle");
@@ -110,7 +109,6 @@ export function useTabSwipe({
   }, []);
 
   const publishVisualIndex = useCallback((nextVisualIndex: number) => {
-    visualIndexRef.current = nextVisualIndex;
     setVisualIndex(nextVisualIndex);
   }, []);
 
@@ -230,6 +228,7 @@ export function useTabSwipe({
       }
 
       if (!track) {
+        publishVisualIndex(targetIndex);
         setPendingIndex(null);
         setPhase("idle");
         onIndexChange(targetIndex);

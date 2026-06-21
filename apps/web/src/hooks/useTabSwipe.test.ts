@@ -173,6 +173,11 @@ function NoTrackMotionStateHarness({
       { "data-testid": "pending-index" },
       String(swipe.pendingIndex),
     ),
+    createElement(
+      "output",
+      { "data-testid": "visual-index" },
+      String(swipe.visualIndex),
+    ),
     createElement("output", { "data-testid": "phase" }, swipe.phase),
     createElement(
       "button",
@@ -180,6 +185,13 @@ function NoTrackMotionStateHarness({
         onClick: () => swipe.settleToIndex(1),
       },
       "Settle current",
+    ),
+    createElement(
+      "button",
+      {
+        onClick: () => swipe.settleToIndex(3),
+      },
+      "Settle changed",
     ),
   );
 }
@@ -622,6 +634,18 @@ describe("useTabSwipe", () => {
     expect(screen.getByTestId("pending-index")).toHaveTextContent("null");
     expect(screen.getByTestId("phase")).toHaveTextContent("idle");
     expect(onIndexChange).not.toHaveBeenCalled();
+  });
+
+  test("publishes visual index when settling to a changed tab without a track", () => {
+    const onIndexChange = vi.fn();
+    render(createElement(NoTrackMotionStateHarness, { onIndexChange }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Settle changed" }));
+
+    expect(onIndexChange).toHaveBeenCalledWith(3);
+    expect(screen.getByTestId("visual-index")).toHaveTextContent("3");
+    expect(screen.getByTestId("pending-index")).toHaveTextContent("null");
+    expect(screen.getByTestId("phase")).toHaveTextContent("idle");
   });
 
   test("settles an accepted swipe before committing navigation", () => {
