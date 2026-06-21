@@ -40,6 +40,7 @@ export function TabCarousel({
 }: TabCarouselProps) {
   const activeSlideRef = useRef<HTMLDivElement>(null);
   const handledNavigationRequestIdRef = useRef<number | null>(null);
+  const onMotionStateChangeRef = useRef(onMotionStateChange);
   const swipe = useTabSwipe({
     activeIndex,
     onIndexChange: onActiveIndexChange,
@@ -48,13 +49,17 @@ export function TabCarousel({
   });
   const { settleToIndex } = swipe;
 
+  useLayoutEffect(() => {
+    onMotionStateChangeRef.current = onMotionStateChange;
+  }, [onMotionStateChange]);
+
   useEffect(() => {
-    onMotionStateChange?.({
+    onMotionStateChangeRef.current?.({
       pendingIndex: swipe.pendingIndex,
       phase: swipe.phase,
       visualIndex: swipe.visualIndex,
     });
-  }, [onMotionStateChange, swipe.pendingIndex, swipe.phase, swipe.visualIndex]);
+  }, [swipe.pendingIndex, swipe.phase, swipe.visualIndex]);
 
   useEffect(() => {
     if (!navigationRequest) {

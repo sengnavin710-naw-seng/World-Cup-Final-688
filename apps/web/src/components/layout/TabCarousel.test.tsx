@@ -95,6 +95,38 @@ function RequestHarness() {
   );
 }
 
+function UnstableMotionCallbackHarness() {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [notifications, setNotifications] = useState<string[]>([]);
+
+  return (
+    <>
+      <output data-testid="motion-notification-count">
+        {notifications.length}
+      </output>
+      <TabCarousel
+        activeIndex={activeIndex}
+        onActiveIndexChange={setActiveIndex}
+        onMotionStateChange={(state) => {
+          setNotifications((current) => {
+            if (current.length > 1) {
+              throw new Error("motion state notified repeatedly");
+            }
+
+            return [
+              ...current,
+              `${state.visualIndex}:${state.pendingIndex}:${state.phase}`,
+            ];
+          });
+        }}
+        reducedMotion={false}
+        renderTab={(tab: HomeTab) => <div>{`${tab} content`}</div>}
+        tabs={tabs}
+      />
+    </>
+  );
+}
+
 function setViewportWidth(viewport: HTMLElement, width: number) {
   Object.defineProperty(viewport, "clientWidth", {
     configurable: true,
@@ -325,5 +357,13 @@ describe("TabCarousel", () => {
     expect(screen.getByText("Fixtures content")).toBeInTheDocument();
     expect(screen.getByText("Table content")).toBeInTheDocument();
     expect(screen.getByText("News content")).toBeInTheDocument();
+  });
+
+  test("does not replay unchanged motion state for unstable callbacks", () => {
+    render(<UnstableMotionCallbackHarness />);
+
+    expect(screen.getByTestId("motion-notification-count")).toHaveTextContent(
+      "1",
+    );
   });
 });
