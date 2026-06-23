@@ -72,6 +72,31 @@ function fireTransitionEndEvent(target: HTMLElement, propertyName: string) {
   fireEvent(target, event);
 }
 
+function installAnimationFrameClock() {
+  let nextFrameId = 1;
+  const callbacks = new Map<number, FrameRequestCallback>();
+
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+    const frameId = nextFrameId;
+    nextFrameId += 1;
+    callbacks.set(frameId, callback);
+    return frameId;
+  });
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation((frameId) => {
+    callbacks.delete(frameId);
+  });
+
+  return {
+    advance(timestamp: number) {
+      const pendingCallbacks = [...callbacks.values()];
+      callbacks.clear();
+      act(() => {
+        pendingCallbacks.forEach((callback) => callback(timestamp));
+      });
+    },
+  };
+}
+
 beforeEach(() => {
   controlledResizeObservers = [];
   vi.stubGlobal("ResizeObserver", ControlledResizeObserver);
@@ -333,6 +358,7 @@ test("disables the shared tab indicator transition for reduced motion", async ()
 });
 
 test("clicking a far tab keeps the current tab selected until carousel settle ends", async () => {
+  const frameClock = installAnimationFrameClock();
   render(<App />);
   await screen.findByLabelText("World Cup knockout bracket");
 
@@ -344,6 +370,7 @@ test("clicking a far tab keeps the current tab selected until carousel settle en
   });
 
   fireEvent.click(screen.getByRole("tab", { name: "News" }));
+  frameClock.advance(16);
 
   expect(track.style.transform).toBe("translate3d(-1170px, 0, 0)");
   expect(screen.getByRole("tab", { name: "Knockout" })).toHaveAttribute(
@@ -584,6 +611,7 @@ test("defines the carousel layout and local tab states", () => {
   expect(applicationStyles).toContain(".tab-local-skeleton");
   expect(applicationStyles).toContain(".tab-refresh-notice");
   expect(applicationStyles).not.toContain("@keyframes tab-screen-enter-right");
+  expect(applicationStyles).not.toMatch(/\.tab-button:hover\s*\{/);
 });
 
 test("uses compact mobile spacing around fixture date headings", () => {

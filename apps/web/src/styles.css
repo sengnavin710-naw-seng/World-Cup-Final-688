@@ -449,15 +449,8 @@ button {
   font-weight: 700;
   padding: 14px 0 15px;
   position: relative;
-  transition:
-    background-color 160ms ease,
-    color 160ms ease;
+  transition: color 160ms ease;
   z-index: 1;
-}
-
-.tab-button:hover {
-  background: rgba(0, 171, 255, 0.1);
-  color: #102a43;
 }
 
 .tab-button[aria-selected="true"] {
@@ -672,6 +665,10 @@ button {
 .group-table-scroll {
   width: 100%;
   max-width: 100%;
+  overflow: visible;
+}
+
+.group-table-scroll.table-mode-full {
   overflow-x: auto;
   overscroll-behavior-x: contain;
 }
@@ -877,6 +874,8 @@ button {
 }
 
 .fixture-kickoff-time {
+  display: grid;
+  gap: 2px;
   color: var(--text);
   font-size: 0.92rem;
   font-weight: 650;
@@ -1067,15 +1066,16 @@ button {
   width: 86px;
   height: 80px;
   padding: 8px 9px 7px;
-  border: 1px solid #454545;
+  border: 1px solid #0088cc;
   border-radius: 9px;
-  background: #202020;
-  box-shadow: 0 7px 15px rgba(0, 0, 0, 0.16);
+  background: #00abff;
+  color: #ffffff;
+  box-shadow: 0 7px 15px rgba(0, 104, 156, 0.2);
 }
 
 .knockout-card-featured {
-  border-color: #5b5b5b;
-  background: #242424;
+  border-color: #0079b8;
+  background: #00abff;
 }
 
 .knockout-card-crests,
@@ -1091,7 +1091,26 @@ button {
   width: 17px;
   height: 17px;
   border-radius: 999px;
-  background: #484848;
+  background: rgba(255, 255, 255, 0.34);
+  border: 1px solid rgba(255, 255, 255, 0.48);
+  display: inline-grid;
+  place-items: center;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.knockout-crest-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+  background: #ffffff;
+}
+
+.knockout-crest-fallback {
+  font-size: 0.62rem;
+  line-height: 1;
 }
 
 .knockout-card-teams {
@@ -1121,7 +1140,7 @@ button {
 .knockout-owner-name {
   max-width: 100%;
   overflow: hidden;
-  color: #9fb0c0;
+  color: rgba(255, 255, 255, 0.78);
   font-size: 0.58rem;
   font-weight: 500;
   line-height: 1.1;
@@ -1130,7 +1149,7 @@ button {
 }
 
 .knockout-card-date {
-  color: #b7c3cf;
+  color: #ffffff;
   font-size: 0.66rem;
   line-height: 1.16;
   text-align: center;
@@ -1241,6 +1260,17 @@ button {
   white-space: nowrap;
 }
 
+.fixture-kickoff-time small {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.fixture-kickoff-time small.is-live {
+  color: #e5484d;
+}
+
 .knockout-status-chip[aria-pressed="true"] {
   border-color: #00abff;
   background: #00abff;
@@ -1290,9 +1320,11 @@ button {
 
 .knockout-mobile-bracket-scroll {
   max-height: min(72vh, 760px);
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   overscroll-behavior: contain;
   touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
   background: #ffffff;
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -1340,10 +1372,11 @@ button {
   width: 240px;
   min-height: var(--knockout-mobile-card-height);
   padding: 9px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid #0088cc;
   border-radius: 10px;
-  background: #202020;
-  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.2);
+  background: #00abff;
+  color: #ffffff;
+  box-shadow: 0 10px 18px rgba(0, 104, 156, 0.2);
   will-change: opacity;
 }
 
@@ -1381,7 +1414,7 @@ button {
 }
 
 .knockout-mobile-final-contender .knockout-team-label {
-  color: #f6f8fb;
+  color: #ffffff;
   font-size: 0.82rem;
   font-weight: 700;
   line-height: 1.15;
@@ -1391,7 +1424,7 @@ button {
 .knockout-mobile-final-trophy {
   display: grid;
   place-items: center;
-  color: #858585;
+  color: rgba(255, 255, 255, 0.76);
 }
 
 .knockout-mobile-final-meta {
@@ -1399,8 +1432,8 @@ button {
   justify-items: center;
   gap: 2px;
   padding-top: 11px;
-  border-top: 1px solid #383838;
-  color: #f4f6f8;
+  border-top: 1px solid rgba(255, 255, 255, 0.28);
+  color: #ffffff;
   text-align: center;
 }
 
@@ -1418,7 +1451,7 @@ button {
 
 .knockout-mobile-bronze-venue {
   margin-top: 5px;
-  color: #f4f6f8;
+  color: #ffffff;
   font-size: 0.75rem;
   line-height: 1.2;
 }
@@ -1433,7 +1466,7 @@ button {
   min-width: 0;
   align-items: center;
   gap: 6px;
-  color: #e9edf2;
+  color: #ffffff;
   font-size: 0.74rem;
   line-height: 1.2;
 }
@@ -1478,7 +1511,7 @@ button {
 
 .knockout-mobile-card-team .knockout-team-label {
   min-width: 0;
-  color: #f6f8fb;
+  color: #ffffff;
   font-size: 0.78rem;
   line-height: 1.12;
   overflow-wrap: anywhere;
@@ -1497,8 +1530,8 @@ button {
   display: grid;
   min-height: 38px;
   align-items: center;
-  border-left: 1px solid #343434;
-  color: #d9e0e8;
+  border-left: 1px solid rgba(255, 255, 255, 0.28);
+  color: #ffffff;
   font-size: 0.68rem;
   line-height: 1.26;
   text-align: center;

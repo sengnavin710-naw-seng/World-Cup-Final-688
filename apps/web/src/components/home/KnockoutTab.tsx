@@ -29,6 +29,8 @@ type MobileTouchStart = {
   axis: "pending" | "horizontal" | "vertical";
   clientX: number;
   clientY?: number;
+  lockedRoundIndex: number;
+  lockedScrollLeft: number;
   roundIndex: number;
   scrollLeft: number;
   scrollTop: number;
@@ -39,9 +41,14 @@ type MobileSnapTarget = {
   startScrollLeft: number;
   targetScrollLeft: number;
 };
+type MobileVerticalLock = {
+  roundIndex: number;
+  scrollLeft: number;
+};
 type ResolvedKnockoutTeam = {
   label: string;
   ownerName?: string;
+  team?: Team;
 };
 
 const board = {
@@ -74,12 +81,12 @@ const rowCenters = new Map([
 
 const mobileBoard = {
   cardWidth: 240,
-  cardHeight: 82,
+  cardHeight: 108,
   finalCardHeight: 220,
   bronzeCardHeight: 136,
   bronzeCardWidthRatio: 0.82,
   columnGap: 16,
-  rowGap: 14,
+  rowGap: 18,
   finalCardGap: 28,
   branchGap: 50,
   left: 8,
@@ -92,6 +99,7 @@ const mobileRoundSnapDuration = 180;
 const mobileFastSwipeDistance = 180;
 const mobileFastSwipeVelocity = 1.8;
 const mobileGestureAxisThreshold = 6;
+const mobileCardFadeStartProgress = 0.1;
 
 const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 const monthLabels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
@@ -272,7 +280,32 @@ function resolveKnockoutTeam(value: string, teams: Team[]): ResolvedKnockoutTeam
   return {
     label: team?.name ?? value,
     ownerName: team?.ownedByName,
+    team,
   };
+}
+
+function KnockoutCrest({ teams, value }: { teams: Team[]; value: string }) {
+  const [hasImageError, setHasImageError] = useState(false);
+  const { team } = resolveKnockoutTeam(value, teams);
+
+  if (!team) {
+    return <span className="knockout-crest" aria-hidden="true" />;
+  }
+
+  return (
+    <span className="knockout-crest" aria-hidden="true">
+      {hasImageError ? (
+        <span className="knockout-crest-fallback">{team.flag}</span>
+      ) : (
+        <img
+          alt=""
+          className="knockout-crest-image"
+          src={`/team-logos/${team.code.toLowerCase()}.png`}
+          onError={() => setHasImageError(true)}
+        />
+      )}
+    </span>
+  );
 }
 
 function KnockoutTeamName({ teams, value }: { teams: Team[]; value: string }) {
@@ -400,6 +433,24 @@ function getClosestMobileRoundIndex(roundOffsets: number[], viewportAnchor: numb
 
 function clampUnit(value: number) {
   return Math.min(1, Math.max(0, value));
+}
+
+function getMobileCardFadeProgress(progress: number) {
+  const clampedProgress = clampUnit(progress);
+
+  if (clampedProgress <= mobileCardFadeStartProgress) {
+    return 0;
+  }
+
+  if (clampedProgress < 0.5) {
+    return (
+      ((clampedProgress - mobileCardFadeStartProgress) /
+        (0.5 - mobileCardFadeStartProgress)) *
+      0.5
+    );
+  }
+
+  return clampedProgress;
 }
 
 function getMobileSnapEaseOut(progress: number) {
@@ -605,6 +656,7 @@ function getMobileBracketLayout(
     roundOffsets,
     getMobileViewportAnchor(scrollLeft),
   );
+  const fadeProgress = getMobileCardFadeProgress(progress);
   const fromLayout = getAnchoredMobileBracketLayout(
     rounds,
     fromRoundIndex,
@@ -625,7 +677,7 @@ function getMobileBracketLayout(
           roundIndex < fromRoundIndex
             ? 0
             : roundIndex === fromRoundIndex
-              ? 1 - progress
+              ? 1 - fadeProgress
               : 1,
         width: interpolateNumber(match.width, toMatch.width, progress),
         x: interpolateNumber(match.x, toMatch.x, progress),
@@ -720,8 +772,8 @@ function MatchCard({ match, teams }: { match: BracketMatch; teams: Team[] }) {
       style={style}
     >
       <div className="knockout-card-crests" aria-hidden="true">
-        <span className="knockout-crest" />
-        <span className="knockout-crest" />
+        <KnockoutCrest teams={teams} value={match.homeTeam} />
+        <KnockoutCrest teams={teams} value={match.awayTeam} />
       </div>
       <div className="knockout-card-teams">
         <KnockoutTeamName teams={teams} value={match.homeTeam} />
@@ -755,14 +807,14 @@ function MobileBracketMatchCard({ match, teams }: { match: MobilePositionedMatch
         <>
           <div className="knockout-mobile-final-stage">
             <div className="knockout-mobile-final-contender">
-              <span className="knockout-crest" aria-hidden="true" />
+              <KnockoutCrest teams={teams} value={match.homeTeam} />
               <KnockoutTeamName teams={teams} value={match.homeTeam} />
             </div>
             <div className="knockout-mobile-final-trophy" aria-hidden="true">
               <Trophy size={64} strokeWidth={1.35} />
             </div>
             <div className="knockout-mobile-final-contender">
-              <span className="knockout-crest" aria-hidden="true" />
+              <KnockoutCrest teams={teams} value={match.awayTeam} />
               <KnockoutTeamName teams={teams} value={match.awayTeam} />
             </div>
           </div>
@@ -783,11 +835,11 @@ function MobileBracketMatchCard({ match, teams }: { match: MobilePositionedMatch
           <div className="knockout-mobile-card-body">
             <div className="knockout-mobile-card-teams">
               <div className="knockout-mobile-card-team">
-                <span className="knockout-crest" aria-hidden="true" />
+                <KnockoutCrest teams={teams} value={match.homeTeam} />
                 <KnockoutTeamName teams={teams} value={match.homeTeam} />
               </div>
               <div className="knockout-mobile-card-team">
-                <span className="knockout-crest" aria-hidden="true" />
+                <KnockoutCrest teams={teams} value={match.awayTeam} />
                 <KnockoutTeamName teams={teams} value={match.awayTeam} />
               </div>
             </div>
@@ -818,6 +870,7 @@ export function KnockoutTab({
   const mobileRoundButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const mobileTouchStartRef = useRef<MobileTouchStart | null>(null);
   const mobileSnapTargetRef = useRef<MobileSnapTarget | null>(null);
+  const mobileVerticalLockRef = useRef<MobileVerticalLock | null>(null);
   const mobileSnapAnimationFrameRef = useRef<number | null>(null);
   const mobileScrollFrameRef = useRef<number | null>(null);
   const latestMobileScrollLeftRef = useRef(0);
@@ -904,6 +957,7 @@ export function KnockoutTab({
     }
 
     mobileSnapTargetRef.current = null;
+    mobileVerticalLockRef.current = null;
     setActiveMobileRound(targetRound.round);
     mobileRoundButtonRefs.current[roundIndex]?.scrollIntoView?.({
       behavior: "auto",
@@ -925,6 +979,15 @@ export function KnockoutTab({
     });
   };
 
+  const cancelMobileScrollUpdate = () => {
+    if (mobileScrollFrameRef.current === null) {
+      return;
+    }
+
+    cancelAnimationFrame(mobileScrollFrameRef.current);
+    mobileScrollFrameRef.current = null;
+  };
+
   const cancelMobileSnapAnimation = () => {
     if (mobileSnapAnimationFrameRef.current === null) {
       return;
@@ -932,6 +995,20 @@ export function KnockoutTab({
 
     cancelAnimationFrame(mobileSnapAnimationFrameRef.current);
     mobileSnapAnimationFrameRef.current = null;
+  };
+
+  const resetMobileHorizontalScroll = (
+    scroller: HTMLDivElement,
+    targetScrollLeft: number,
+  ) => {
+    if (Math.abs(scroller.scrollLeft - targetScrollLeft) > 0.5) {
+      scroller.scrollLeft = targetScrollLeft;
+    }
+
+    if (Math.abs(latestMobileScrollLeftRef.current - targetScrollLeft) > 0.5) {
+      latestMobileScrollLeftRef.current = targetScrollLeft;
+      setMobileScrollLeft(targetScrollLeft);
+    }
   };
 
   const animateMobileSnap = (
@@ -946,6 +1023,7 @@ export function KnockoutTab({
     }
 
     cancelMobileSnapAnimation();
+    cancelMobileScrollUpdate();
     const startScrollLeft = scroller.scrollLeft;
     const startScrollTop = scroller.scrollTop;
     let startedAt: number | null = null;
@@ -961,7 +1039,8 @@ export function KnockoutTab({
 
       scroller.scrollLeft = nextScrollLeft;
       scroller.scrollTop = nextScrollTop;
-      scheduleMobileScrollUpdate(nextScrollLeft);
+      latestMobileScrollLeftRef.current = nextScrollLeft;
+      setMobileScrollLeft(nextScrollLeft);
 
       if (progress < 1) {
         mobileSnapAnimationFrameRef.current = requestAnimationFrame(animateFrame);
@@ -998,6 +1077,19 @@ export function KnockoutTab({
   };
 
   const handleMobileBracketScroll = (scroller: HTMLDivElement) => {
+    const gestureStart = mobileTouchStartRef.current;
+    const verticalLock = mobileVerticalLockRef.current;
+
+    if (gestureStart?.axis === "vertical") {
+      resetMobileHorizontalScroll(scroller, gestureStart.lockedScrollLeft);
+      return;
+    }
+
+    if (verticalLock && gestureStart?.axis !== "horizontal") {
+      resetMobileHorizontalScroll(scroller, verticalLock.scrollLeft);
+      return;
+    }
+
     let scrollLeft = scroller.scrollLeft;
     const snapTarget = mobileSnapTargetRef.current;
 
@@ -1013,10 +1105,11 @@ export function KnockoutTab({
           top: scroller.scrollTop,
         });
       }
+
+      return;
     }
 
-    const shouldThrottle =
-      mobileTouchStartRef.current !== null || mobileSnapTargetRef.current !== null;
+    const shouldThrottle = mobileTouchStartRef.current !== null;
 
     if (shouldThrottle) {
       scheduleMobileScrollUpdate(scrollLeft);
@@ -1054,13 +1147,26 @@ export function KnockoutTab({
     event.stopPropagation();
 
     cancelMobileSnapAnimation();
+    const verticalLock = mobileVerticalLockRef.current;
+    if (verticalLock) {
+      event.currentTarget.scrollLeft = verticalLock.scrollLeft;
+    }
     const scrollLeft = event.currentTarget.scrollLeft;
     const touch = event.touches[0];
+    const lockedRoundIndex = Math.max(
+      0,
+      rounds.findIndex((round) => round.round === activeMobileRound),
+    );
     mobileSnapTargetRef.current = null;
     mobileTouchStartRef.current = {
       axis: "pending",
       clientX: touch?.clientX ?? 0,
       clientY: touch?.clientY,
+      lockedRoundIndex,
+      lockedScrollLeft: getMobileRoundScrollLeft(
+        mobileLayout.roundOffsets,
+        lockedRoundIndex,
+      ),
       roundIndex: getClosestMobileRoundIndex(
         mobileLayout.roundOffsets,
         getMobileViewportAnchor(scrollLeft),
@@ -1097,9 +1203,19 @@ export function KnockoutTab({
         Math.abs(horizontalDelta) > Math.abs(verticalDelta) ? "horizontal" : "vertical";
     }
 
+    if (gestureStart.axis === "vertical") {
+      mobileVerticalLockRef.current = {
+        roundIndex: gestureStart.lockedRoundIndex,
+        scrollLeft: gestureStart.lockedScrollLeft,
+      };
+      return;
+    }
+
     if (gestureStart.axis !== "horizontal") {
       return;
     }
+
+    mobileVerticalLockRef.current = null;
 
     if (event.cancelable) {
       event.preventDefault();
@@ -1126,7 +1242,6 @@ export function KnockoutTab({
     event.stopPropagation();
 
     const gestureStart = mobileTouchStartRef.current;
-    mobileTouchStartRef.current = null;
 
     if (!gestureStart) {
       return;
@@ -1153,12 +1268,39 @@ export function KnockoutTab({
       gestureStart.axis === "vertical" ||
       Math.abs(verticalDelta) > Math.abs(horizontalDelta)
     ) {
+      mobileVerticalLockRef.current = {
+        roundIndex: gestureStart.lockedRoundIndex,
+        scrollLeft: gestureStart.lockedScrollLeft,
+      };
+      resetMobileHorizontalScroll(event.currentTarget, gestureStart.lockedScrollLeft);
+      requestAnimationFrame(() => {
+        if (mobileTouchStartRef.current === gestureStart) {
+          mobileTouchStartRef.current = null;
+        }
+      });
       return;
     }
+
+    mobileTouchStartRef.current = null;
+    mobileVerticalLockRef.current = null;
 
     if (
       horizontalDelta >= mobileFastSwipeDistance &&
       horizontalVelocity >= mobileFastSwipeVelocity &&
+      allowFastForward &&
+      onFastForwardSwipe
+    ) {
+      mobileSnapTargetRef.current = null;
+      onFastForwardSwipe();
+      return;
+    }
+
+    const lastRoundIndex = Math.max(0, rounds.length - 1);
+
+    if (
+      horizontalDelta >= mobileRoundSnapThreshold &&
+      (gestureStart.roundIndex >= lastRoundIndex ||
+        gestureStart.lockedRoundIndex >= lastRoundIndex) &&
       allowFastForward &&
       onFastForwardSwipe
     ) {

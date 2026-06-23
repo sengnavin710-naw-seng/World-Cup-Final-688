@@ -239,6 +239,34 @@ test("shows an owner name beneath a resolved knockout team", () => {
   expect(screen.getAllByText(BURMESE_NAME).length).toBeGreaterThan(0);
 });
 
+test("renders a logo for resolved knockout teams and keeps placeholders plain", () => {
+  const resolvedRounds: KnockoutRound[] = [
+    {
+      round: "Round of 32",
+      matches: [
+        {
+          id: "resolved-logo",
+          matchNumber: 73,
+          homeTeam: "ARG",
+          awayTeam: "Group B runner-up",
+          homeScore: 0,
+          awayScore: 0,
+          kickoff: "Jun 28",
+          venue: "Los Angeles Stadium",
+        },
+      ],
+    },
+  ];
+
+  const { container } = render(<KnockoutTab rounds={resolvedRounds} teams={ownedTeams} />);
+  const logoImages = [...container.querySelectorAll<HTMLImageElement>(".knockout-crest-image")];
+
+  expect(logoImages.length).toBeGreaterThan(0);
+  expect(logoImages.every((image) => image.getAttribute("src") === "/team-logos/arg.png")).toBe(
+    true,
+  );
+});
+
 test("does not attach an owner name to unresolved knockout placeholders", () => {
   render(<KnockoutTab rounds={rounds} teams={ownedTeams} />);
 
@@ -379,7 +407,7 @@ test("keeps the last round of 32 card clear and renders all quarter-final cards"
   const board = mobileBracket.querySelector(".knockout-mobile-bracket-board");
   const componentSource = readFileSync("src/components/home/KnockoutTab.tsx", "utf8");
 
-  expect(board).toHaveStyle({ "--knockout-mobile-board-height": "1668px" });
+  expect(board).toHaveStyle({ "--knockout-mobile-board-height": "2144px" });
   expect(
     mobileBracket.querySelectorAll(
       '.knockout-mobile-bracket-card[aria-label^="Quarter-finals:"]',
@@ -394,7 +422,7 @@ test("compacts the mobile bracket height around the active round", () => {
   const scroller = mobileBracket.querySelector(".knockout-mobile-bracket-scroll");
   const board = mobileBracket.querySelector(".knockout-mobile-bracket-board");
   expect(scroller).toBeInstanceOf(HTMLDivElement);
-  expect(board).toHaveStyle({ "--knockout-mobile-board-height": "1668px" });
+  expect(board).toHaveStyle({ "--knockout-mobile-board-height": "2144px" });
 
   Object.defineProperty(scroller, "scrollLeft", {
     configurable: true,
@@ -406,9 +434,9 @@ test("compacts the mobile bracket height around the active round", () => {
     '.knockout-mobile-bracket-card[aria-label^="Round of 16:"]',
   );
 
-  expect(board).toHaveStyle({ "--knockout-mobile-board-height": "900px" });
+  expect(board).toHaveStyle({ "--knockout-mobile-board-height": "1136px" });
   expect(roundOf16Cards[0]).toHaveStyle({ top: "14px" });
-  expect(roundOf16Cards[1]).toHaveStyle({ top: "110px" });
+  expect(roundOf16Cards[1]).toHaveStyle({ top: "140px" });
 });
 
 test("keeps quarter-final mobile cards split into upper and lower branches", () => {
@@ -429,11 +457,11 @@ test("keeps quarter-final mobile cards split into upper and lower branches", () 
   );
 
   expect(quarterFinalCards).toHaveLength(4);
-  expect(board).toHaveStyle({ "--knockout-mobile-board-height": "900px" });
+  expect(board).toHaveStyle({ "--knockout-mobile-board-height": "1136px" });
   expect(quarterFinalCards[0]).toHaveStyle({ top: "14px" });
-  expect(quarterFinalCards[1]).toHaveStyle({ top: "110px" });
-  expect(quarterFinalCards[2]).toHaveStyle({ top: "256px" });
-  expect(quarterFinalCards[3]).toHaveStyle({ top: "352px" });
+  expect(quarterFinalCards[1]).toHaveStyle({ top: "140px" });
+  expect(quarterFinalCards[2]).toHaveStyle({ top: "316px" });
+  expect(quarterFinalCards[3]).toHaveStyle({ top: "442px" });
 });
 
 test("retains the round of 16 board height through every later round", () => {
@@ -449,15 +477,15 @@ test("retains the round of 16 board height through every later round", () => {
     writable: true,
   });
   fireEvent.scroll(scroller!);
-  expect(board).toHaveStyle({ "--knockout-mobile-board-height": "900px" });
+  expect(board).toHaveStyle({ "--knockout-mobile-board-height": "1136px" });
 
   scroller!.scrollLeft = 768;
   fireEvent.scroll(scroller!);
-  expect(board).toHaveStyle({ "--knockout-mobile-board-height": "900px" });
+  expect(board).toHaveStyle({ "--knockout-mobile-board-height": "1136px" });
 
   scroller!.scrollLeft = 1024;
   fireEvent.scroll(scroller!);
-  expect(board).toHaveStyle({ "--knockout-mobile-board-height": "900px" });
+  expect(board).toHaveStyle({ "--knockout-mobile-board-height": "1136px" });
 });
 
 test("keeps the Final and Bronze-final geometry stable throughout the final snap", () => {
@@ -568,14 +596,14 @@ test("keeps round of 16 bottom space from the semi-finals through the finals", (
     value: 768,
   });
   fireEvent.scroll(scroller!);
-  expect(board).toHaveStyle({ "--knockout-mobile-board-height": "900px" });
+  expect(board).toHaveStyle({ "--knockout-mobile-board-height": "1136px" });
 
   Object.defineProperty(scroller, "scrollLeft", {
     configurable: true,
     value: 1024,
   });
   fireEvent.scroll(scroller!);
-  expect(board).toHaveStyle({ "--knockout-mobile-board-height": "900px" });
+  expect(board).toHaveStyle({ "--knockout-mobile-board-height": "1136px" });
 });
 
 test("anchors future quarter-final cards to the correct mobile branch before the round is active", () => {
@@ -625,8 +653,8 @@ test("interpolates mobile card positions while swiping between rounds", () => {
     '.knockout-mobile-bracket-card[aria-label^="Round of 16:"]',
   );
 
-  expect(roundOf16Cards[0]).toHaveStyle({ top: "38px" });
-  expect(roundOf16Cards[1]).toHaveStyle({ top: "182px" });
+  expect(roundOf16Cards[0]).toHaveStyle({ top: "45.5px" });
+  expect(roundOf16Cards[1]).toHaveStyle({ top: "234.5px" });
 });
 
 test("tracks chip progress without changing the settled round during drag", () => {
@@ -651,6 +679,37 @@ test("tracks chip progress without changing the settled round during drag", () =
     "aria-selected",
     "true",
   );
+});
+
+test("keeps the outgoing card fully opaque during a tentative micro-drag", () => {
+  const animationClock = installAnimationFrameClock();
+  render(<KnockoutTab rounds={fullMobileRounds} teams={[]} />);
+  const mobileBracket = screen.getByLabelText("World Cup knockout rounds");
+  const scroller = mobileBracket.querySelector(".knockout-mobile-bracket-scroll");
+  const outgoingCard = mobileBracket.querySelector(
+    '.knockout-mobile-bracket-card[data-round-index="0"]',
+  );
+  let scrollLeft = 0;
+  expect(scroller).toBeInstanceOf(HTMLDivElement);
+
+  Object.defineProperty(scroller!, "scrollLeft", {
+    configurable: true,
+    get: () => scrollLeft,
+    set: (value) => {
+      scrollLeft = Number(value);
+    },
+  });
+
+  fireEvent.touchStart(scroller!, {
+    touches: [{ clientX: 220, clientY: 100 }],
+  });
+  fireEvent.touchMove(scroller!, {
+    touches: [{ clientX: 200, clientY: 101 }],
+  });
+  animationClock.advance(0);
+
+  expect(scrollLeft).toBe(20);
+  expect(outgoingCard).toHaveStyle({ opacity: "1" });
 });
 
 test("snaps to the next mobile round after a short forward swipe", () => {
@@ -777,6 +836,84 @@ test("drives horizontal bracket movement directly from the finger", () => {
   });
 
   expect(scrollLeft).toBe(48);
+});
+
+test("completes horizontal gestures from the closest scroll anchor", () => {
+  const animationClock = installAnimationFrameClock();
+  render(<KnockoutTab rounds={lateMobileRounds} teams={[]} />);
+  const mobileBracket = screen.getByLabelText("World Cup knockout rounds");
+  const scroller = mobileBracket.querySelector(".knockout-mobile-bracket-scroll");
+  let scrollLeft = 256;
+  expect(scroller).toBeInstanceOf(HTMLDivElement);
+
+  Object.defineProperty(scroller!, "scrollLeft", {
+    configurable: true,
+    get: () => scrollLeft,
+    set: (value) => {
+      scrollLeft = Number(value);
+    },
+  });
+
+  fireEvent.scroll(scroller!);
+  expect(screen.getByRole("tab", { name: "Round of 16" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+
+  scrollLeft = 500;
+  fireEvent.scroll(scroller!);
+  fireEvent.touchStart(scroller!, {
+    touches: [{ clientX: 220, clientY: 100 }],
+  });
+  fireEvent.touchMove(scroller!, {
+    touches: [{ clientX: 180, clientY: 101 }],
+  });
+  fireEvent.touchEnd(scroller!, {
+    changedTouches: [{ clientX: 180, clientY: 101 }],
+  });
+
+  animationClock.finish();
+  expect(scrollLeft).toBe(768);
+  expect(screen.getByRole("tab", { name: "Semi-finals" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+});
+
+test("keeps card opacity synchronized with the snap position", () => {
+  const animationClock = installAnimationFrameClock();
+  render(<KnockoutTab rounds={fullMobileRounds} teams={[]} />);
+  const mobileBracket = screen.getByLabelText("World Cup knockout rounds");
+  const scroller = mobileBracket.querySelector(".knockout-mobile-bracket-scroll");
+  const outgoingCard = mobileBracket.querySelector(
+    '.knockout-mobile-bracket-card[data-round-index="0"]',
+  ) as HTMLElement;
+  let scrollLeft = 0;
+  expect(scroller).toBeInstanceOf(HTMLDivElement);
+
+  Object.defineProperty(scroller!, "scrollLeft", {
+    configurable: true,
+    get: () => scrollLeft,
+    set: (value) => {
+      scrollLeft = Number(value);
+    },
+  });
+
+  fireEvent.touchStart(scroller!, {
+    touches: [{ clientX: 220, clientY: 100 }],
+  });
+  fireEvent.touchMove(scroller!, {
+    touches: [{ clientX: 160, clientY: 101 }],
+  });
+  fireEvent.touchEnd(scroller!, {
+    changedTouches: [{ clientX: 160, clientY: 101 }],
+  });
+
+  animationClock.advance(0);
+  animationClock.advance(90);
+
+  expect(scrollLeft).toBeGreaterThan(200);
+  expect(Number(outgoingCard.style.opacity)).toBeLessThan(0.3);
 });
 
 test("snaps from the semi-finals to the final when the touch is cancelled", () => {
@@ -1038,6 +1175,58 @@ test("hands a very fast forward swipe to the next home tab", () => {
   expect(scrollTo).not.toHaveBeenCalled();
 });
 
+test("hands a normal forward swipe from Finals to the next home tab", () => {
+  const onFastForwardSwipe = vi.fn();
+  render(
+    <KnockoutTab
+      rounds={lateMobileRounds}
+      teams={[]}
+      onFastForwardSwipe={onFastForwardSwipe}
+    />,
+  );
+  const mobileBracket = screen.getByLabelText("World Cup knockout rounds");
+  const scroller = mobileBracket.querySelector(".knockout-mobile-bracket-scroll");
+  const scrollTo = vi.fn();
+  let scrollLeft = 0;
+  expect(scroller).toBeInstanceOf(HTMLDivElement);
+
+  Object.defineProperties(scroller!, {
+    scrollLeft: {
+      configurable: true,
+      get: () => scrollLeft,
+      set: (value) => {
+        scrollLeft = Number(value);
+      },
+    },
+    scrollTo: {
+      configurable: true,
+      value: scrollTo,
+    },
+  });
+
+  scrollLeft = 1024;
+  fireEvent.scroll(scroller!);
+
+  expect(screen.getByRole("tab", { name: "Finals" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+
+  const touchStart = createEvent.touchStart(scroller!, {
+    touches: [{ clientX: 300, clientY: 200 }],
+  });
+  Object.defineProperty(touchStart, "timeStamp", { value: 1_000 });
+  fireEvent(scroller!, touchStart);
+  const touchEnd = createEvent.touchEnd(scroller!, {
+    changedTouches: [{ clientX: 260, clientY: 202 }],
+  });
+  Object.defineProperty(touchEnd, "timeStamp", { value: 1_250 });
+  fireEvent(scroller!, touchEnd);
+
+  expect(onFastForwardSwipe).toHaveBeenCalledTimes(1);
+  expect(scrollTo).not.toHaveBeenCalled();
+});
+
 test("fades outgoing connector lines with their source cards", () => {
   render(<KnockoutTab rounds={fullMobileRounds} teams={[]} />);
   const mobileBracket = screen.getByLabelText("World Cup knockout rounds");
@@ -1115,6 +1304,105 @@ test("does not snap back to the top after a vertical mobile bracket scroll", () 
   );
 });
 
+test("locks a diagonal vertical mobile bracket scroll to the starting round immediately", () => {
+  const animationClock = installAnimationFrameClock();
+  render(<KnockoutTab rounds={fullMobileRounds} teams={[]} />);
+  const mobileBracket = screen.getByLabelText("World Cup knockout rounds");
+  const scroller = mobileBracket.querySelector(".knockout-mobile-bracket-scroll");
+  const scrollIntoView = vi.fn();
+  let scrollLeft = 256;
+  let scrollTop = 0;
+  expect(scroller).toBeInstanceOf(HTMLDivElement);
+
+  Object.defineProperties(scroller!, {
+    scrollLeft: {
+      configurable: true,
+      get: () => scrollLeft,
+      set: (value) => {
+        scrollLeft = Number(value);
+      },
+    },
+    scrollTop: {
+      configurable: true,
+      get: () => scrollTop,
+      set: (value) => {
+        scrollTop = Number(value);
+      },
+    },
+  });
+  fireEvent.scroll(scroller!);
+  expect(screen.getByRole("tab", { name: "Round of 16" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  Object.defineProperty(screen.getByRole("tab", { name: "Round of 16" }), "scrollIntoView", {
+    configurable: true,
+    value: scrollIntoView,
+  });
+  fireEvent.touchStart(scroller!, { touches: [{ clientX: 180, clientY: 520 }] });
+  fireEvent.touchMove(scroller!, { touches: [{ clientX: 172, clientY: 390 }] });
+  scrollLeft = 272;
+  scrollTop = 320;
+  fireEvent.scroll(scroller!);
+  expect(scrollLeft).toBe(256);
+
+  scrollLeft = 272;
+  fireEvent.touchEnd(scroller!, { changedTouches: [{ clientX: 172, clientY: 220 }] });
+
+  expect(scrollLeft).toBe(256);
+  fireEvent.scroll(scroller!);
+  expect(scrollTop).toBe(320);
+  expect(scrollIntoView).not.toHaveBeenCalled();
+  expect(screen.getByRole("tab", { name: "Round of 16" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+});
+
+test("keeps the selected round locked when a late vertical bounce drifts horizontally", () => {
+  const animationClock = installAnimationFrameClock();
+  render(<KnockoutTab rounds={fullMobileRounds} teams={[]} />);
+  const mobileBracket = screen.getByLabelText("World Cup knockout rounds");
+  const scroller = mobileBracket.querySelector(".knockout-mobile-bracket-scroll");
+  let scrollLeft = 0;
+  let scrollTop = 1220;
+  expect(scroller).toBeInstanceOf(HTMLDivElement);
+
+  Object.defineProperties(scroller!, {
+    scrollLeft: {
+      configurable: true,
+      get: () => scrollLeft,
+      set: (value) => {
+        scrollLeft = Number(value);
+      },
+    },
+    scrollTop: {
+      configurable: true,
+      get: () => scrollTop,
+      set: (value) => {
+        scrollTop = Number(value);
+      },
+    },
+  });
+
+  fireEvent.scroll(scroller!);
+  fireEvent.touchStart(scroller!, { touches: [{ clientX: 190, clientY: 640 }] });
+  fireEvent.touchMove(scroller!, { touches: [{ clientX: 182, clientY: 500 }] });
+  fireEvent.touchEnd(scroller!, { changedTouches: [{ clientX: 182, clientY: 360 }] });
+  animationClock.finish();
+
+  scrollLeft = 256;
+  fireEvent.scroll(scroller!);
+  animationClock.advance(200);
+
+  expect(scrollLeft).toBe(0);
+  expect(scrollTop).toBe(1220);
+  expect(screen.getByRole("tab", { name: "Round of 32" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+});
+
 test("marks the mobile bracket scroller as a strong home-tab escape zone", () => {
   render(<KnockoutTab rounds={fullMobileRounds} teams={[]} />);
   const scroller = screen
@@ -1131,7 +1419,8 @@ test("uses compact card sizing for the knockout bracket", () => {
 
   expect(componentSource).toMatch(/cardWidth:\s*240,/);
   expect(componentSource).toMatch(/columnGap:\s*16,/);
-  expect(componentSource).toMatch(/cardHeight:\s*82,/);
+  expect(componentSource).toMatch(/cardHeight:\s*108,/);
+  expect(componentSource).toMatch(/rowGap:\s*18,/);
   expect(componentSource).toMatch(/finalCardHeight:\s*220,/);
   expect(componentSource).toMatch(/bronzeCardHeight:\s*136,/);
   expect(applicationStyles).toMatch(
@@ -1182,7 +1471,7 @@ test("sizes mobile round chips by their labels like the reference", () => {
   );
 });
 
-test("uses one white mobile Knockout container with dark match cards", () => {
+test("uses one white mobile Knockout container with solid brand-blue match cards", () => {
   const applicationStyles = readFileSync("src/styles.css", "utf8");
 
   expect(applicationStyles).toMatch(
@@ -1198,7 +1487,16 @@ test("uses one white mobile Knockout container with dark match cards", () => {
     /\.knockout-mobile-bracket-scroll\s*\{[^}]*background:\s*#ffffff;/s,
   );
   expect(applicationStyles).toMatch(
-    /\.knockout-mobile-bracket-card\s*\{[^}]*background:\s*#202020;/s,
+    /\.knockout-card\s*\{[^}]*background:\s*#00abff;[^}]*color:\s*#ffffff;/s,
+  );
+  expect(applicationStyles).toMatch(
+    /\.knockout-mobile-bracket-card\s*\{[^}]*background:\s*#00abff;[^}]*color:\s*#ffffff;/s,
+  );
+  expect(applicationStyles).toMatch(
+    /\.knockout-mobile-card-team \.knockout-team-label\s*\{[^}]*color:\s*#ffffff;/s,
+  );
+  expect(applicationStyles).toMatch(
+    /\.knockout-mobile-card-body time\s*\{[^}]*border-left:\s*1px solid rgba\(255, 255, 255, 0\.28\);[^}]*color:\s*#ffffff;/s,
   );
   expect(applicationStyles).toMatch(
     /\.knockout-status-chip\[aria-pressed="true"\]\s*\{[^}]*background:\s*#00abff;[^}]*color:\s*#ffffff;/s,

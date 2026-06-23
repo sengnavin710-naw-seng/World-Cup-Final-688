@@ -65,12 +65,19 @@ export function resolveSwipeDelta({
 
 interface UseTabSwipeOptions {
   activeIndex: number;
+  onMotionStateChange?: (state: TabSwipeMotionState) => void;
   onIndexChange: (nextIndex: number) => void;
   reducedMotion: boolean;
   tabCount: number;
 }
 
 export type TabSwipePhase = "idle" | "dragging" | "settling";
+
+export type TabSwipeMotionState = {
+  pendingIndex: number | null;
+  phase: TabSwipePhase;
+  visualIndex: number;
+};
 
 interface ActiveGesture {
   captured: boolean;
@@ -83,6 +90,7 @@ interface ActiveGesture {
 
 export function useTabSwipe({
   activeIndex,
+  onMotionStateChange,
   onIndexChange,
   reducedMotion,
   tabCount,
@@ -97,9 +105,53 @@ export function useTabSwipe({
   const pendingTransitionEndTargetRef = useRef<HTMLDivElement | null>(null);
   const pendingTimeoutRef = useRef<number | null>(null);
   const observedViewportWidthRef = useRef<number | null>(null);
+  const onMotionStateChangeRef = useRef(onMotionStateChange);
+  const visualIndexRef = useRef(activeIndex);
+  const pendingIndexRef = useRef<number | null>(null);
+  const phaseRef = useRef<TabSwipePhase>("idle");
   const [visualIndex, setVisualIndex] = useState(activeIndex);
   const [pendingIndex, setPendingIndex] = useState<number | null>(null);
   const [phase, setPhase] = useState<TabSwipePhase>("idle");
+
+  useLayoutEffect(() => {
+    onMotionStateChangeRef.current = onMotionStateChange;
+  }, [onMotionStateChange]);
+
+  const notifyMotionState = useCallback(() => {
+    onMotionStateChangeRef.current?.({
+      pendingIndex: pendingIndexRef.current,
+      phase: phaseRef.current,
+      visualIndex: visualIndexRef.current,
+    });
+  }, []);
+
+  const updatePendingIndex = useCallback(
+    (nextPendingIndex: number | null, notify = false) => {
+      if (pendingIndexRef.current !== nextPendingIndex) {
+        pendingIndexRef.current = nextPendingIndex;
+        setPendingIndex(nextPendingIndex);
+      }
+
+      if (notify) {
+        notifyMotionState();
+      }
+    },
+    [notifyMotionState],
+  );
+
+  const updatePhase = useCallback(
+    (nextPhase: TabSwipePhase, notify = false) => {
+      if (phaseRef.current !== nextPhase) {
+        phaseRef.current = nextPhase;
+        setPhase(nextPhase);
+      }
+
+      if (notify) {
+        notifyMotionState();
+      }
+    },
+    [notifyMotionState],
+  );
 
   const cancelFrame = useCallback(() => {
     if (rafRef.current !== null) {
@@ -108,9 +160,18 @@ export function useTabSwipe({
     }
   }, []);
 
-  const publishVisualIndex = useCallback((nextVisualIndex: number) => {
-    setVisualIndex(nextVisualIndex);
-  }, []);
+  const publishVisualIndex = useCallback(
+    (nextVisualIndex: number, syncRenderState = false) => {
+      visualIndexRef.current = nextVisualIndex;
+
+      if (syncRenderState) {
+        setVisualIndex(nextVisualIndex);
+      }
+
+      notifyMotionState();
+    },
+    [notifyMotionState],
+  );
 
   const setTransform = useCallback(
     (index: number, dragOffset = 0, animated = false) => {
@@ -129,9 +190,20 @@ export function useTabSwipe({
       track.style.transform = `translate3d(${
         -nextVisualIndex * width
       }px, 0, 0)`;
-      publishVisualIndex(nextVisualIndex);
+      publishVisualIndex(nextVisualIndex, dragOffset === 0);
     },
     [publishVisualIndex, reducedMotion],
+  );
+
+  const scheduleSettledTransform = useCallback(
+    (targetIndex: number) => {
+      cancelFrame();
+      rafRef.current = window.requestAnimationFrame(() => {
+        rafRef.current = null;
+        setTransform(targetIndex, 0, true);
+      });
+    },
+    [cancelFrame, setTransform],
   );
 
   const settle = useCallback(
@@ -143,6 +215,11 @@ export function useTabSwipe({
   );
 
   const clearPendingSettle = useCallback(() => {
+    const shouldNotify =
+      pendingTargetIndexRef.current !== null ||
+      pendingIndexRef.current !== null ||
+      phaseRef.current !== "idle";
+
     if (pendingTimeoutRef.current !== null) {
       window.clearTimeout(pendingTimeoutRef.current);
       pendingTimeoutRef.current = null;
@@ -160,11 +237,15 @@ export function useTabSwipe({
 
     pendingTargetIndexRef.current = null;
     pendingShouldCommitRef.current = false;
-    setPendingIndex(null);
-    setPhase("idle");
+    updatePendingIndex(null);
+    updatePhase("idle");
     pendingTransitionEndTargetRef.current = null;
     pendingTransitionEndListenerRef.current = null;
-  }, []);
+
+    if (shouldNotify) {
+      notifyMotionState();
+    }
+  }, [notifyMotionState, updatePendingIndex, updatePhase]);
 
   const completePendingSettle = useCallback(() => {
     const targetIndex = pendingTargetIndexRef.current;
@@ -188,9 +269,8 @@ export function useTabSwipe({
 
       if (reducedMotion) {
         setTransform(targetIndex, 0, false);
-        publishVisualIndex(targetIndex);
-        setPendingIndex(null);
-        setPhase("idle");
+        updatePendingIndex(null);
+        updatePhase("idle");
         if (targetIndex !== activeIndex) {
           onIndexChange(targetIndex);
         }
@@ -199,9 +279,9 @@ export function useTabSwipe({
 
       if (targetIndex === activeIndex) {
         if (!track) {
-          publishVisualIndex(targetIndex);
-          setPendingIndex(null);
-          setPhase("idle");
+          publishVisualIndex(targetIndex, true);
+          updatePendingIndex(null);
+          updatePhase("idle");
           return;
         }
 
@@ -215,13 +295,13 @@ export function useTabSwipe({
 
         pendingTargetIndexRef.current = targetIndex;
         pendingShouldCommitRef.current = false;
-        setPendingIndex(targetIndex);
-        setPhase("settling");
+        updatePendingIndex(targetIndex);
+        updatePhase("settling");
         pendingTransitionEndTargetRef.current = track;
         pendingTransitionEndListenerRef.current = handleTransitionEnd;
 
-        setTransform(targetIndex, 0, true);
         track.addEventListener("transitionend", handleTransitionEnd);
+        scheduleSettledTransform(targetIndex);
         pendingTimeoutRef.current = window.setTimeout(() => {
           completePendingSettle();
         }, SETTLE_FALLBACK_MS);
@@ -229,9 +309,9 @@ export function useTabSwipe({
       }
 
       if (!track) {
-        publishVisualIndex(targetIndex);
-        setPendingIndex(null);
-        setPhase("idle");
+        publishVisualIndex(targetIndex, true);
+        updatePendingIndex(null);
+        updatePhase("idle");
         onIndexChange(targetIndex);
         return;
       }
@@ -246,13 +326,13 @@ export function useTabSwipe({
 
       pendingTargetIndexRef.current = targetIndex;
       pendingShouldCommitRef.current = true;
-      setPendingIndex(targetIndex);
-      setPhase("settling");
+      updatePendingIndex(targetIndex);
+      updatePhase("settling");
       pendingTransitionEndTargetRef.current = track;
       pendingTransitionEndListenerRef.current = handleTransitionEnd;
 
-      setTransform(targetIndex, 0, true);
       track.addEventListener("transitionend", handleTransitionEnd);
+      scheduleSettledTransform(targetIndex);
       pendingTimeoutRef.current = window.setTimeout(() => {
         completePendingSettle();
       }, SETTLE_FALLBACK_MS);
@@ -264,7 +344,10 @@ export function useTabSwipe({
       onIndexChange,
       publishVisualIndex,
       reducedMotion,
+      scheduleSettledTransform,
       setTransform,
+      updatePendingIndex,
+      updatePhase,
     ],
   );
 
@@ -382,7 +465,7 @@ export function useTabSwipe({
       }
 
       event.preventDefault();
-      setPhase("dragging");
+      updatePhase("dragging");
 
       const isPastFirstTab = activeIndex === 0 && distanceX > 0;
       const isPastLastTab =
@@ -398,7 +481,7 @@ export function useTabSwipe({
         setTransform(activeIndex, dragOffset);
       });
     },
-    [activeIndex, cancelFrame, setTransform, tabCount],
+    [activeIndex, cancelFrame, setTransform, tabCount, updatePhase],
   );
 
   const onPointerUp = useCallback(

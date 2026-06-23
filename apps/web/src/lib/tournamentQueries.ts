@@ -25,17 +25,20 @@ export const tournamentQueries = {
     queryKey: ["tournament", "knockout"] as const,
     queryFn: fetchKnockout,
     select: (result) => result.knockout,
+    refetchInterval: 60 * SECOND,
     staleTime: 30 * SECOND
   }),
   fixtures: queryOptions({
     queryKey: ["tournament", "fixtures"] as const,
     queryFn: fetchFixtures,
     select: (result) => result.fixtures,
+    refetchInterval: 60 * SECOND,
     staleTime: 30 * SECOND
   }),
   table: queryOptions({
     queryKey: ["tournament", "table"] as const,
     queryFn: fetchStandings,
+    refetchInterval: 2 * MINUTE,
     staleTime: 30 * SECOND
   }),
   news: queryOptions({

@@ -31,12 +31,43 @@ const twoMatchSlots = ["01:30", "08:30"];
 const standardKickoffSlots = ["01:30", "04:30", "07:30", "08:30", "22:30"];
 
 function getFixtureDate(value: string) {
-  return value.split("T")[0] ?? value;
+  if (!value.includes("T")) {
+    return value;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value.split("T")[0] ?? value;
+  }
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? "";
+
+  return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
 function getExplicitKickoffTime(value: string) {
-  const match = value.match(/T(\d{2}):(\d{2})/);
-  return match ? `${match[1]}:${match[2]}` : null;
+  if (!value.includes("T")) {
+    return null;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+  }).format(date);
 }
 
 function formatFixtureDate(value: string, style: "full" | "short") {
@@ -44,8 +75,28 @@ function formatFixtureDate(value: string, style: "full" | "short") {
     weekday: style === "full" ? "long" : "short",
     day: "numeric",
     month: style === "full" ? "long" : "short",
-    timeZone: "UTC",
-  }).format(new Date(`${value}T00:00:00Z`));
+  }).format(new Date(`${value}T12:00:00`));
+}
+
+const liveStatuses = new Set(["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"]);
+
+function getFixtureCenter(fixture: Fixture, kickoffTime: string) {
+  const hasScore = fixture.homeScore != null && fixture.awayScore != null;
+
+  if (!hasScore) {
+    return { primary: kickoffTime, secondary: "" };
+  }
+
+  const status = fixture.statusShort ?? "";
+  const secondary =
+    liveStatuses.has(status) && fixture.statusElapsed != null
+      ? `${fixture.statusElapsed}'`
+      : status;
+
+  return {
+    primary: `${fixture.homeScore} - ${fixture.awayScore}`,
+    secondary,
+  };
 }
 
 function sortFixtures(fixtures: Fixture[]) {
@@ -221,9 +272,16 @@ function FixtureMatchRow({
   fixture: Fixture;
   kickoffTime: string;
 }) {
+  const center = getFixtureCenter(fixture, kickoffTime);
+  const dateTime = fixture.kickoff.includes("T")
+    ? fixture.kickoff
+    : `${getFixtureDate(fixture.kickoff)}T${kickoffTime}`;
+
   return (
     <div
-      aria-label={`${fixture.homeTeamName} vs ${fixture.awayTeamName} at ${kickoffTime}`}
+      aria-label={`${fixture.homeTeamName} vs ${fixture.awayTeamName}: ${center.primary}${
+        center.secondary ? `, ${center.secondary}` : ""
+      }`}
       className="fixture-match-row"
     >
       <FixtureTeam
@@ -233,8 +291,13 @@ function FixtureMatchRow({
         ownerName={displayNamesByTeam.get(fixture.homeTeam)}
         side="home"
       />
-      <time className="fixture-kickoff-time" dateTime={`${getFixtureDate(fixture.kickoff)}T${kickoffTime}`}>
-        {kickoffTime}
+      <time className="fixture-kickoff-time" dateTime={dateTime}>
+        <span>{center.primary}</span>
+        {center.secondary ? (
+          <small className={liveStatuses.has(fixture.statusShort ?? "") ? "is-live" : ""}>
+            {center.secondary}
+          </small>
+        ) : null}
       </time>
       <FixtureTeam
         code={fixture.awayTeam}

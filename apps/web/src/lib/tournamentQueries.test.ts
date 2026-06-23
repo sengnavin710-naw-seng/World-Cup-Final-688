@@ -25,9 +25,12 @@ describe("tournament query options", () => {
   test("uses the approved freshness windows", () => {
     expect(tournamentQueries.teams.staleTime).toBe(24 * 60 * 60 * 1000);
     expect(tournamentQueries.knockout.staleTime).toBe(30 * 1000);
+    expect(tournamentQueries.knockout.refetchInterval).toBe(60 * 1000);
     expect(tournamentQueries.fixtures.staleTime).toBe(30 * 1000);
     expect(tournamentQueries.table.staleTime).toBe(30 * 1000);
     expect(tournamentQueries.news.staleTime).toBe(5 * 60 * 1000);
+    expect(tournamentQueries.fixtures.refetchInterval).toBe(60 * 1000);
+    expect(tournamentQueries.table.refetchInterval).toBe(2 * 60 * 1000);
   });
 
   test("deduplicates repeated fixtures-tab prefetches", async () => {

@@ -2,7 +2,11 @@ import "@testing-library/jest-dom/vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { createElement, useState, type MutableRefObject } from "react";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { resolveSwipeDelta, useTabSwipe } from "./useTabSwipe";
+import {
+  resolveSwipeDelta,
+  useTabSwipe,
+  type TabSwipeMotionState,
+} from "./useTabSwipe";
 
 function SwipeHarness({
   reducedMotion = true,
@@ -97,15 +101,18 @@ function SettlingSwipeHarness({
 }
 
 function MotionStateHarness({
+  onMotionStateChange,
   onIndexChange,
   reducedMotion = false,
 }: {
+  onMotionStateChange?: (state: TabSwipeMotionState) => void;
   onIndexChange: (nextIndex: number) => void;
   reducedMotion?: boolean;
 }) {
   const [activeIndex, setActiveIndex] = useState(1);
   const swipe = useTabSwipe({
     activeIndex,
+    onMotionStateChange,
     onIndexChange: (nextIndex) => {
       onIndexChange(nextIndex);
       setActiveIndex(nextIndex);
@@ -207,13 +214,16 @@ function NoTrackMotionStateHarness({
 
 function StaleVisualNoTrackHarness({
   onSwipe,
+  onMotionStateChange,
   onIndexChange,
 }: {
+  onMotionStateChange?: (state: TabSwipeMotionState) => void;
   onSwipe: (swipe: ReturnType<typeof useTabSwipe>) => void;
   onIndexChange: (nextIndex: number) => void;
 }) {
   const swipe = useTabSwipe({
     activeIndex: 1,
+    onMotionStateChange,
     onIndexChange,
     reducedMotion: false,
     tabCount: 4,
@@ -621,8 +631,16 @@ describe("resolveSwipeDelta", () => {
 describe("useTabSwipe", () => {
   test("reports fractional visual index while dragging", () => {
     const frameClock = installAnimationFrameClock();
+    const motionStates: TabSwipeMotionState[] = [];
     const onIndexChange = vi.fn();
-    render(createElement(MotionStateHarness, { onIndexChange }));
+    render(
+      createElement(MotionStateHarness, {
+        onIndexChange,
+        onMotionStateChange: (state) => {
+          motionStates.push(state);
+        },
+      }),
+    );
     const viewport = screen.getByTestId("swipe-viewport");
     const track = screen.getByTestId("swipe-track");
 
@@ -644,17 +662,21 @@ describe("useTabSwipe", () => {
     frameClock.advance(16);
 
     expect(screen.getByTestId("phase")).toHaveTextContent("dragging");
-    expect(screen.getByTestId("visual-index")).toHaveTextContent("1.25");
+    expect(motionStates.at(-1)?.visualIndex).toBe(1.25);
+    expect(motionStates.at(-1)?.phase).toBe("dragging");
+    expect(screen.getByTestId("visual-index")).toHaveTextContent("1");
     expect(track.style.transform).toBe("translate3d(-500px, 0, 0)");
     expect(onIndexChange).not.toHaveBeenCalled();
   });
 
   test("settles to a far clicked tab before committing active index", () => {
+    const frameClock = installAnimationFrameClock();
     const onIndexChange = vi.fn();
     render(createElement(MotionStateHarness, { onIndexChange }));
     const track = screen.getByTestId("swipe-track");
 
     fireEvent.click(screen.getByRole("button", { name: "Go to News" }));
+    frameClock.advance(16);
 
     expect(screen.getByTestId("visual-index")).toHaveTextContent("3");
     expect(screen.getByTestId("pending-index")).toHaveTextContent("3");
@@ -715,6 +737,7 @@ describe("useTabSwipe", () => {
 
   test("restores visual index when settling to the current tab without a track", () => {
     const frameClock = installAnimationFrameClock();
+    const motionStates: TabSwipeMotionState[] = [];
     const onIndexChange = vi.fn();
     const latestSwipeRef: {
       current: ReturnType<typeof useTabSwipe> | null;
@@ -722,6 +745,9 @@ describe("useTabSwipe", () => {
     render(
       createElement(StaleVisualNoTrackHarness, {
         onIndexChange,
+        onMotionStateChange: (state) => {
+          motionStates.push(state);
+        },
         onSwipe: (swipe) => {
           latestSwipeRef.current = swipe;
         },
@@ -743,7 +769,8 @@ describe("useTabSwipe", () => {
     });
     frameClock.advance(16);
 
-    expect(screen.getByTestId("visual-index")).toHaveTextContent("1.25");
+    expect(motionStates.at(-1)?.visualIndex).toBe(1.25);
+    expect(screen.getByTestId("visual-index")).toHaveTextContent("1");
 
     const latestSwipe = latestSwipeRef.current;
 
@@ -758,7 +785,7 @@ describe("useTabSwipe", () => {
     });
 
     expect(latestSwipe.trackRef.current).toBeNull();
-    expect(screen.getByTestId("visual-index")).toHaveTextContent("1.25");
+    expect(screen.getByTestId("visual-index")).toHaveTextContent("1");
 
     act(() => {
       latestSwipe.settleToIndex(1);
@@ -771,6 +798,7 @@ describe("useTabSwipe", () => {
   });
 
   test("settles an accepted swipe before committing navigation", () => {
+    const frameClock = installAnimationFrameClock();
     const onIndexChange = vi.fn();
     render(createElement(SettlingSwipeHarness, { onIndexChange }));
     const viewport = screen.getByTestId("swipe-viewport");
@@ -779,6 +807,7 @@ describe("useTabSwipe", () => {
     setNonCapturingPointerApi(viewport);
 
     swipeLeftAccepted(viewport, 6);
+    frameClock.advance(16);
 
     expect(onIndexChange).not.toHaveBeenCalled();
     expect(track.style.transform).toBe("translate3d(-780px, 0, 0)");
@@ -790,6 +819,46 @@ describe("useTabSwipe", () => {
 
     expect(onIndexChange).toHaveBeenCalledTimes(1);
     expect(onIndexChange).toHaveBeenCalledWith(2);
+  });
+
+  test("starts an accepted settle on the frame after the dragged position is painted", () => {
+    const frameClock = installAnimationFrameClock();
+    const onIndexChange = vi.fn();
+    render(createElement(SettlingSwipeHarness, { onIndexChange }));
+    const viewport = screen.getByTestId("swipe-viewport");
+    const track = screen.getByTestId("swipe-track");
+
+    setNonCapturingPointerApi(viewport);
+    firePointerEvent(viewport, "pointerdown", {
+      clientX: 260,
+      clientY: 200,
+      pointerId: 23,
+    });
+    firePointerEvent(viewport, "pointermove", {
+      clientX: 140,
+      clientY: 202,
+      pointerId: 23,
+    });
+    frameClock.advance(16);
+
+    expect(track.style.transform).toBe("translate3d(-510px, 0, 0)");
+
+    firePointerEvent(viewport, "pointerup", {
+      clientX: 140,
+      clientY: 202,
+      pointerId: 23,
+    });
+
+    expect(track.style.transform).toBe("translate3d(-510px, 0, 0)");
+    expect(onIndexChange).not.toHaveBeenCalled();
+
+    frameClock.advance(32);
+
+    expect(track.style.transform).toBe("translate3d(-780px, 0, 0)");
+    expect(track.style.transition).toBe(
+      "transform 300ms cubic-bezier(0.4, 0, 0.2, 1)",
+    );
+    expect(onIndexChange).not.toHaveBeenCalled();
   });
 
   test("falls back to the timeout when transform never ends", () => {
@@ -828,6 +897,7 @@ describe("useTabSwipe", () => {
   });
 
   test("settles a rejected swipe back to the active tab", () => {
+    const frameClock = installAnimationFrameClock();
     const onIndexChange = vi.fn();
     render(createElement(SettlingSwipeHarness, { onIndexChange }));
     const viewport = screen.getByTestId("swipe-viewport");
@@ -836,6 +906,7 @@ describe("useTabSwipe", () => {
     setNonCapturingPointerApi(viewport);
 
     swipeLeftRejected(viewport, 7);
+    frameClock.advance(16);
 
     expect(onIndexChange).not.toHaveBeenCalled();
     expect(track.style.transform).toBe("translate3d(-390px, 0, 0)");
@@ -846,6 +917,7 @@ describe("useTabSwipe", () => {
 
   test("keeps a rejected snap-back locked until it settles", () => {
     vi.useFakeTimers();
+    const frameClock = installAnimationFrameClock();
 
     const onIndexChange = vi.fn();
     render(createElement(SettlingSwipeHarness, { onIndexChange }));
@@ -854,6 +926,7 @@ describe("useTabSwipe", () => {
     setNonCapturingPointerApi(viewport);
 
     swipeLeftRejected(viewport, 14);
+    frameClock.advance(16);
 
     const track = screen.getByTestId("swipe-track");
 
@@ -865,6 +938,7 @@ describe("useTabSwipe", () => {
     fireTransitionEndEvent(track, "transform");
 
     swipeLeftAccepted(viewport, 16);
+    frameClock.advance(32);
 
     expect(track.style.transform).toBe("translate3d(-780px, 0, 0)");
     expect(onIndexChange).not.toHaveBeenCalled();
@@ -877,6 +951,7 @@ describe("useTabSwipe", () => {
 
   test("keeps a cancelled snap-back locked until it settles", () => {
     vi.useFakeTimers();
+    const frameClock = installAnimationFrameClock();
 
     const onIndexChange = vi.fn();
     render(createElement(SettlingSwipeHarness, { onIndexChange }));
@@ -890,6 +965,7 @@ describe("useTabSwipe", () => {
       clientY: 202,
       pointerId: 17,
     });
+    frameClock.advance(16);
 
     const track = screen.getByTestId("swipe-track");
 
@@ -906,6 +982,7 @@ describe("useTabSwipe", () => {
     fireTransitionEndEvent(track, "transform");
 
     swipeLeftAccepted(viewport, 19);
+    frameClock.advance(32);
 
     expect(track.style.transform).toBe("translate3d(-780px, 0, 0)");
     expect(onIndexChange).not.toHaveBeenCalled();

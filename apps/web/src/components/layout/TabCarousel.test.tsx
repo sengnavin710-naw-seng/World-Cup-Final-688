@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { useState } from "react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { useState, type ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { HomeTab } from "../../lib/tournamentQueries";
 import { TabCarousel } from "./TabCarousel";
@@ -57,6 +57,24 @@ function Harness({ reducedMotion = false }: { reducedMotion?: boolean }) {
       onActiveIndexChange={setActiveIndex}
       reducedMotion={reducedMotion}
       renderTab={(tab: HomeTab) => <div>{`${tab} content`}</div>}
+      tabs={tabs}
+    />
+  );
+}
+
+function RenderCountingHarness({
+  renderTab,
+}: {
+  renderTab: (tab: HomeTab) => ReactElement;
+}) {
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  return (
+    <TabCarousel
+      activeIndex={activeIndex}
+      onActiveIndexChange={setActiveIndex}
+      reducedMotion={false}
+      renderTab={renderTab}
       tabs={tabs}
     />
   );
@@ -162,6 +180,33 @@ function fireTransitionEndEvent(target: HTMLElement, propertyName: string) {
   const event = new Event("transitionend", { bubbles: true, cancelable: true });
   Object.defineProperty(event, "propertyName", { value: propertyName });
   fireEvent(target, event);
+}
+
+function installAnimationFrameClock() {
+  let nextFrameId = 1;
+  const callbacks = new Map<number, FrameRequestCallback>();
+
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+    const frameId = nextFrameId;
+    nextFrameId += 1;
+    callbacks.set(frameId, callback);
+    return frameId;
+  });
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation((frameId) => {
+    callbacks.delete(frameId);
+  });
+
+  const advance = (timestamp: number) => {
+    const pendingCallbacks = [...callbacks.values()];
+    callbacks.clear();
+    act(() => {
+      pendingCallbacks.forEach((callback) => callback(timestamp));
+    });
+  };
+
+  return {
+    advance,
+  };
 }
 
 function swipeLeft(viewport: HTMLElement, pointerId: number) {
@@ -321,12 +366,14 @@ describe("TabCarousel", () => {
   });
 
   test("animates a far navigation request without committing early", () => {
+    const frameClock = installAnimationFrameClock();
     render(<RequestHarness />);
     const viewport = screen.getByLabelText("Tournament tabs");
     const track = screen.getByTestId("tab-carousel-track");
     setViewportWidth(viewport, 390);
 
     fireEvent.click(screen.getByRole("button", { name: "Request News" }));
+    frameClock.advance(16);
 
     expect(track.style.transform).toBe("translate3d(-1170px, 0, 0)");
     expect(track.style.transition).toBe(
@@ -344,6 +391,36 @@ describe("TabCarousel", () => {
     expect(screen.getByTestId("tab-slide-News")).not.toHaveAttribute(
       "aria-hidden",
     );
+  });
+
+  test("does not rerender tab contents for repeated drag-frame visual updates", () => {
+    const frameClock = installAnimationFrameClock();
+    const renderTab = vi.fn((tab: HomeTab) => <div>{`${tab} content`}</div>);
+    render(<RenderCountingHarness renderTab={renderTab} />);
+    const viewport = screen.getByLabelText("Tournament tabs");
+    setViewportWidth(viewport, 390);
+
+    firePointerEvent(viewport, "pointerdown", {
+      clientX: 300,
+      clientY: 100,
+      pointerId: 1,
+    });
+    firePointerEvent(viewport, "pointermove", {
+      clientX: 220,
+      clientY: 102,
+      pointerId: 1,
+    });
+    frameClock.advance(16);
+    const callsAfterFirstDragFrame = renderTab.mock.calls.length;
+
+    firePointerEvent(viewport, "pointermove", {
+      clientX: 160,
+      clientY: 102,
+      pointerId: 1,
+    });
+    frameClock.advance(32);
+
+    expect(renderTab).toHaveBeenCalledTimes(callsAfterFirstDragFrame);
   });
 
   test("mounts source, target, and target neighbor slides while settling", () => {

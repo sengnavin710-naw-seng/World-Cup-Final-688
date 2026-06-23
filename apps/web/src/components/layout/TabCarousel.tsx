@@ -1,11 +1,15 @@
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   type ReactNode,
 } from "react";
-import { useTabSwipe, type TabSwipePhase } from "../../hooks/useTabSwipe";
+import {
+  useTabSwipe,
+  type TabSwipeMotionState,
+} from "../../hooks/useTabSwipe";
 import type { HomeTab } from "../../lib/tournamentQueries";
 
 export type TabNavigationRequest = {
@@ -13,11 +17,7 @@ export type TabNavigationRequest = {
   index: number;
 };
 
-export type TabCarouselMotionState = {
-  pendingIndex: number | null;
-  phase: TabSwipePhase;
-  visualIndex: number;
-};
+export type TabCarouselMotionState = TabSwipeMotionState;
 
 type TabCarouselProps = {
   activeIndex: number;
@@ -41,8 +41,12 @@ export function TabCarousel({
   const activeSlideRef = useRef<HTMLDivElement>(null);
   const handledNavigationRequestIdRef = useRef<number | null>(null);
   const onMotionStateChangeRef = useRef(onMotionStateChange);
+  const handleMotionStateChange = useCallback((state: TabSwipeMotionState) => {
+    onMotionStateChangeRef.current?.(state);
+  }, []);
   const swipe = useTabSwipe({
     activeIndex,
+    onMotionStateChange: handleMotionStateChange,
     onIndexChange: onActiveIndexChange,
     reducedMotion,
     tabCount: tabs.length,
@@ -52,14 +56,6 @@ export function TabCarousel({
   useLayoutEffect(() => {
     onMotionStateChangeRef.current = onMotionStateChange;
   }, [onMotionStateChange]);
-
-  useEffect(() => {
-    onMotionStateChangeRef.current?.({
-      pendingIndex: swipe.pendingIndex,
-      phase: swipe.phase,
-      visualIndex: swipe.visualIndex,
-    });
-  }, [swipe.pendingIndex, swipe.phase, swipe.visualIndex]);
 
   useEffect(() => {
     if (!navigationRequest) {
