@@ -45,32 +45,48 @@ type ResolvedKnockoutTeam = {
   team?: Team;
 };
 
+// ─── Desktop board geometry ───────────────────────────────────────────────
+// Card:  130 × 104 px  (wide enough for full team name + owner display name)
+// Board: 1600 × 800 px
+//
+// Column layout (4 rounds per side, symmetric):
+//   Left  col-1 x=0,   col-2 x=212, col-3 x=412, col-4 x=598
+//   Right col-1 x=1470, col-2 x=1258, col-3 x=1058, col-4 x=872
+//   Center x = (1600-130)/2 = 735
+//
+// Row centers for 8 slots (col-1), 4 slots (col-2), 2 slots (col-3), 1 slot (col-4):
+//   Vertical spacing: board height 800, 8 rows → ~84px pitch
 const board = {
-  width: 1280,
-  height: 684,
-  cardWidth: 86,
-  cardHeight: 80,
+  width: 1600,
+  height: 800,
+  cardWidth: 130,
+  cardHeight: 104,
 };
 
 const leftColumnX = new Map([
   [1, 0],
-  [2, 170],
-  [3, 330],
-  [4, 480],
+  [2, 212],
+  [3, 412],
+  [4, 598],
 ]);
 
 const rightColumnX = new Map([
-  [1, 1194],
-  [2, 1024],
-  [3, 864],
-  [4, 714],
+  [1, 1470],
+  [2, 1258],
+  [3, 1058],
+  [4, 872],
 ]);
 
+// Row center Y for each column × slot (8 slots in col-1, halved per column)
+// Col-1: 8 matches → pitch = 800/8 = 100, centers at 50,150,250,350,450,550,650,750
+// Col-2: 4 matches → centers at mid of each pair: 100,300,500,700
+// Col-3: 2 matches → centers at 200,600
+// Col-4: 1 match  → center at 400
 const rowCenters = new Map([
-  [1, [44, 128, 212, 296, 388, 472, 556, 640]],
-  [2, [86, 254, 430, 598]],
-  [3, [170, 514]],
-  [4, [342]],
+  [1, [50, 150, 250, 350, 450, 550, 650, 750]],
+  [2, [100, 300, 500, 700]],
+  [3, [200, 600]],
+  [4, [400]],
 ]);
 
 const mobileBoard = {
@@ -112,7 +128,7 @@ function getMatchPosition(match: KnockoutMatch) {
   if (match.side === "center") {
     return {
       x: (board.width - board.cardWidth) / 2,
-      y: (slot === 1 ? 350 : 474) - board.cardHeight / 2,
+      y: (slot === 1 ? 420 : 570) - board.cardHeight / 2,
     };
   }
 
