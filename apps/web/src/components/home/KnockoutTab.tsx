@@ -61,18 +61,22 @@ const board = {
   cardHeight: 104,
 };
 
+// Add 12px inner horizontal padding so cards at board edges
+// are not clipped by the board's border-radius.
+const BOARD_H_PAD = 12;
+
 const leftColumnX = new Map([
-  [1, 0],
-  [2, 212],
-  [3, 412],
-  [4, 598],
+  [1, BOARD_H_PAD],
+  [2, BOARD_H_PAD + 212],
+  [3, BOARD_H_PAD + 412],
+  [4, BOARD_H_PAD + 598],
 ]);
 
 const rightColumnX = new Map([
-  [1, 1470],
-  [2, 1258],
-  [3, 1058],
-  [4, 872],
+  [1, 1600 - board.cardWidth - BOARD_H_PAD],
+  [2, 1600 - board.cardWidth - BOARD_H_PAD - 212],
+  [3, 1600 - board.cardWidth - BOARD_H_PAD - 412],
+  [4, 1600 - board.cardWidth - BOARD_H_PAD - 598],
 ]);
 
 // pitch = 1050/8 = 131.25 → centers at 65, 196, 327, 458, 589, 720, 851, 982
@@ -284,8 +288,19 @@ function resolveKnockoutTeam(value: string, teams: Team[]): ResolvedKnockoutTeam
       candidate.name.toLowerCase() === normalizedValue,
   );
 
+  // Use 3-letter code for known teams, shorten placeholder names
+  const label = team
+    ? team.code
+    : value
+        .replace(/group ([a-z])/i, "Grp $1")
+        .replace(/winners?/i, "W")
+        .replace(/runners?-?up/i, "RU")
+        .replace(/best third/i, "3rd")
+        .replace(/winner match/i, "W.M")
+        .trim();
+
   return {
-    label: team?.name ?? value,
+    label,
     ownerName: team?.ownedByName,
     team,
   };
