@@ -522,9 +522,13 @@ button {
 
 .tab-panel-knockout {
   margin-top: -8px;
-  padding: 16px 20px 20px;
+  margin-left: -20px;
+  margin-right: -20px;
+  margin-bottom: -20px;
+  padding: 16px 0 0;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.98);
+  border-radius: 0 0 10px 10px;
 }
 
 .tab-panel-table {
@@ -1016,7 +1020,7 @@ button {
 .knockout-board-scroll {
   width: 100%;
   overflow-x: auto;
-  padding: 0;
+  padding: 16px 20px 20px;
   overscroll-behavior-x: contain;
 }
 
@@ -1922,18 +1926,21 @@ button {
 
   .tab-panel-knockout {
     margin-top: 0;
+    margin-left: 0;
+    margin-right: 0;
+    margin-bottom: 0;
     border: 0;
     border-radius: 0;
     background: transparent;
     box-shadow: none;
   }
 
-  .tab-panel-news {
-    padding-top: 0;
-  }
-
   .knockout-board-scroll {
     display: none;
+  }
+
+  .tab-panel-news {
+    padding-top: 0;
   }
 
   .knockout-mobile {
