@@ -9,9 +9,35 @@ function isUpstreamFetchError(error: Error) {
   return error.message.includes("fetch failed");
 }
 
+// Allowed origins — always allow production domain + localhost dev.
+// To add more origins (e.g. local network IP), set CORS_EXTRA_ORIGINS
+// as comma-separated list in the .env file. Example:
+//   CORS_EXTRA_ORIGINS=http://192.168.110.119:5173,http://187.77.140.46:5173
+const ALLOWED_ORIGINS = new Set([
+  "https://seng688.com",
+  "https://www.seng688.com",
+  "http://seng688.com",
+  "http://www.seng688.com",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  ...(process.env.CORS_EXTRA_ORIGINS
+    ? process.env.CORS_EXTRA_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean)
+    : []),
+]);
+
 export function createServer() {
   const app = express();
-  app.use(cors());
+  app.use(
+    cors({
+      origin(origin, callback) {
+        // Allow requests with no origin (mobile apps, curl, server-to-server)
+        if (!origin) return callback(null, true);
+        if (ALLOWED_ORIGINS.has(origin)) return callback(null, true);
+        callback(new Error(`CORS: origin '${origin}' is not allowed`));
+      },
+      credentials: true,
+    }),
+  );
   app.use(express.json());
   app.use((req, res, next) => {
     const requestId =

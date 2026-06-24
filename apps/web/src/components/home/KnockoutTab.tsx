@@ -45,32 +45,49 @@ type ResolvedKnockoutTeam = {
   team?: Team;
 };
 
+// ─── Desktop board geometry ───────────────────────────────────────────────
+// Card:  130 × 104 px
+// Board: 1600 × 1050 px
+//
+// Col-1: 8 matches, pitch = 131px, centers = 65,196,327,458,589,720,851,982
+//   gap between cards = 131 - 104 = 27px ✓
+// Col-2: 4 matches, centers = midpoint of each col-1 pair
+// Col-3: 2 matches
+// Col-4: 1 match (center of board)
 const board = {
-  width: 1280,
-  height: 684,
-  cardWidth: 86,
-  cardHeight: 80,
+  width: 1600,
+  height: 1050,
+  cardWidth: 130,
+  cardHeight: 104,
 };
 
+// Add 12px inner horizontal padding so cards at board edges
+// are not clipped by the board's border-radius.
+const BOARD_H_PAD = 12;
+
 const leftColumnX = new Map([
-  [1, 0],
-  [2, 170],
-  [3, 330],
-  [4, 480],
+  [1, BOARD_H_PAD],
+  [2, BOARD_H_PAD + 212],
+  [3, BOARD_H_PAD + 412],
+  [4, BOARD_H_PAD + 598],
 ]);
 
 const rightColumnX = new Map([
-  [1, 1194],
-  [2, 1024],
-  [3, 864],
-  [4, 714],
+  [1, 1600 - board.cardWidth - BOARD_H_PAD],
+  [2, 1600 - board.cardWidth - BOARD_H_PAD - 212],
+  [3, 1600 - board.cardWidth - BOARD_H_PAD - 412],
+  [4, 1600 - board.cardWidth - BOARD_H_PAD - 598],
 ]);
 
+// pitch = 1050/8 = 131.25 → centers at 65, 196, 327, 458, 589, 720, 851, 982
+// col-2 centers = midpoints of col-1 pairs: 131, 393, 655, 917
+// col-3 centers: 262, 786  → rounded to 262, 786
+// col-4 center: 524
 const rowCenters = new Map([
-  [1, [44, 128, 212, 296, 388, 472, 556, 640]],
-  [2, [86, 254, 430, 598]],
-  [3, [170, 514]],
-  [4, [342]],
+  [1, [65, 196, 327, 458, 589, 720, 851, 982]],
+  [2, [131, 393, 655, 917]],
+  [3, [262, 786]],
+  [4, [524]],
 ]);
 
 const mobileBoard = {
@@ -112,7 +129,8 @@ function getMatchPosition(match: KnockoutMatch) {
   if (match.side === "center") {
     return {
       x: (board.width - board.cardWidth) / 2,
-      y: (slot === 1 ? 350 : 474) - board.cardHeight / 2,
+      // Final at ~55% height, Bronze at ~72% height
+      y: (slot === 1 ? Math.round(board.height * 0.55) : Math.round(board.height * 0.72)) - board.cardHeight / 2,
     };
   }
 
@@ -270,8 +288,19 @@ function resolveKnockoutTeam(value: string, teams: Team[]): ResolvedKnockoutTeam
       candidate.name.toLowerCase() === normalizedValue,
   );
 
+  // Use 3-letter code for known teams, shorten placeholder names
+  const label = team
+    ? team.code
+    : value
+        .replace(/group ([a-z])/i, "Grp $1")
+        .replace(/winners?/i, "W")
+        .replace(/runners?-?up/i, "RU")
+        .replace(/best third/i, "3rd")
+        .replace(/winner match/i, "W.M")
+        .trim();
+
   return {
-    label: team?.name ?? value,
+    label,
     ownerName: team?.ownedByName,
     team,
   };
@@ -843,6 +872,8 @@ export function KnockoutTab({
   const [mobileScrollLeft, setMobileScrollLeft] = useState(0);
   const [mobileViewportWidth, setMobileViewportWidth] = useState(0);
   const mobileBoardScrollRef = useRef<HTMLDivElement | null>(null);
+  const boardScrollRef = useRef<HTMLDivElement | null>(null);
+  const [boardScale, setBoardScale] = useState(1);
   const mobileRoundButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const mobileTouchStartRef = useRef<MobileTouchStart | null>(null);
   const mobileSnapTargetRef = useRef<MobileSnapTarget | null>(null);
@@ -885,6 +916,20 @@ export function KnockoutTab({
       ),
     [mobileLayout.roundOffsets, mobileScrollLeft],
   );
+
+  // Auto-scale desktop board to fit container width without horizontal scroll
+  useEffect(() => {
+    const el = boardScrollRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      const containerWidth = entries[0]?.contentRect.width ?? el.clientWidth;
+      if (containerWidth > 0) {
+        setBoardScale(Math.min(1, containerWidth / board.width));
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!rounds.length) {
@@ -1236,13 +1281,19 @@ export function KnockoutTab({
   return (
     <div className="knockout-shell">
 
-      <div className="knockout-board-scroll">
+      <div
+        className="knockout-board-scroll"
+        ref={boardScrollRef}
+        style={{ height: `${Math.round(board.height * boardScale)}px` }}
+      >
         <section
           aria-label="World Cup knockout bracket"
           className="knockout-board"
           style={{
             "--knockout-board-width": `${board.width}px`,
             "--knockout-board-height": `${board.height}px`,
+            transform: boardScale < 1 ? `scale(${boardScale})` : undefined,
+            transformOrigin: "top left",
           } as CSSProperties}
         >
           <svg

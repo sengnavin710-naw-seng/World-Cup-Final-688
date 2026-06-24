@@ -57,11 +57,11 @@ async function fetchFeed(
   try {
     const feed = await parser.parseURL(url);
     return (feed.items ?? []).slice(0, 12).map((item, index) => {
-      const raw = item as Record<string, unknown>;
+      const raw = item as unknown as Record<string, unknown>;
       return {
         id: String(item.guid ?? item.link ?? `${source}-${index}`),
         title: item.title ?? "",
-        summary: stripHtml(String(item.contentSnippet ?? item.description ?? "")),
+        summary: stripHtml(String(item.contentSnippet ?? raw["content"] ?? raw["description"] ?? "")),
         link: item.link ?? "",
         imageUrl: extractImageUrl(raw),
         pubDate: item.pubDate ?? item.isoDate,
