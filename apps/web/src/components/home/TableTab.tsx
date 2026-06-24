@@ -46,7 +46,8 @@ export function TableTab({ companyPicks, scopeMode, standings, tableMode }: Tabl
           <article key={group.group} className="group-card">
             <div
               aria-label={tableMode === "Full" ? `Full standings for Group ${group.group}` : undefined}
-              className="group-table-scroll"
+              className={`group-table-scroll${tableMode === "Full" ? " table-mode-full" : ""}`}
+              data-tab-swipe-ignore={tableMode === "Full" ? "true" : undefined}
               tabIndex={tableMode === "Full" ? 0 : undefined}
             >
               <div className={`group-table-content${tableMode === "Full" ? " table-mode-full" : ""}`}>

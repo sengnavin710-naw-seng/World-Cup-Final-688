@@ -1,6 +1,9 @@
-import { ChevronDown } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { CompanyPick, Fixture } from "../../lib/types";
+import { FixtureFilters, type FixtureFilter } from "./FixtureFilters";
+
+export type { FixtureFilter } from "./FixtureFilters";
+export { FixtureFilters } from "./FixtureFilters";
 
 type FixturesTabProps = {
   activeFilter?: FixtureFilter;
@@ -9,15 +12,6 @@ type FixturesTabProps = {
   participantTeamCode: string;
   selectedGroup?: string;
   showFilters?: boolean;
-};
-
-export type FixtureFilter = (typeof filters)[number];
-
-type FixtureFiltersProps = {
-  activeFilter: FixtureFilter;
-  onFilterChange: (filter: FixtureFilter) => void;
-  onGroupChange: (group: string) => void;
-  selectedGroup: string;
 };
 
 type FixtureDateGroup = {
@@ -33,18 +27,47 @@ type FixtureSection = {
   title: string;
 };
 
-const filters = ["Date", "Round", "My Team", "Group"] as const;
-const groupOptions = "ABCDEFGHIJKL".split("");
 const twoMatchSlots = ["01:30", "08:30"];
 const standardKickoffSlots = ["01:30", "04:30", "07:30", "08:30", "22:30"];
 
 function getFixtureDate(value: string) {
-  return value.split("T")[0] ?? value;
+  if (!value.includes("T")) {
+    return value;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value.split("T")[0] ?? value;
+  }
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? "";
+
+  return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
 function getExplicitKickoffTime(value: string) {
-  const match = value.match(/T(\d{2}):(\d{2})/);
-  return match ? `${match[1]}:${match[2]}` : null;
+  if (!value.includes("T")) {
+    return null;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+  }).format(date);
 }
 
 function formatFixtureDate(value: string, style: "full" | "short") {
@@ -52,8 +75,28 @@ function formatFixtureDate(value: string, style: "full" | "short") {
     weekday: style === "full" ? "long" : "short",
     day: "numeric",
     month: style === "full" ? "long" : "short",
-    timeZone: "UTC",
-  }).format(new Date(`${value}T00:00:00Z`));
+  }).format(new Date(`${value}T12:00:00`));
+}
+
+const liveStatuses = new Set(["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"]);
+
+function getFixtureCenter(fixture: Fixture, kickoffTime: string) {
+  const hasScore = fixture.homeScore != null && fixture.awayScore != null;
+
+  if (!hasScore) {
+    return { primary: kickoffTime, secondary: "" };
+  }
+
+  const status = fixture.statusShort ?? "";
+  const secondary =
+    liveStatuses.has(status) && fixture.statusElapsed != null
+      ? `${fixture.statusElapsed}'`
+      : status;
+
+  return {
+    primary: `${fixture.homeScore} - ${fixture.awayScore}`,
+    secondary,
+  };
 }
 
 function sortFixtures(fixtures: Fixture[]) {
@@ -229,9 +272,16 @@ function FixtureMatchRow({
   fixture: Fixture;
   kickoffTime: string;
 }) {
+  const center = getFixtureCenter(fixture, kickoffTime);
+  const dateTime = fixture.kickoff.includes("T")
+    ? fixture.kickoff
+    : `${getFixtureDate(fixture.kickoff)}T${kickoffTime}`;
+
   return (
     <div
-      aria-label={`${fixture.homeTeamName} vs ${fixture.awayTeamName} at ${kickoffTime}`}
+      aria-label={`${fixture.homeTeamName} vs ${fixture.awayTeamName}: ${center.primary}${
+        center.secondary ? `, ${center.secondary}` : ""
+      }`}
       className="fixture-match-row"
     >
       <FixtureTeam
@@ -241,8 +291,13 @@ function FixtureMatchRow({
         ownerName={displayNamesByTeam.get(fixture.homeTeam)}
         side="home"
       />
-      <time className="fixture-kickoff-time" dateTime={`${getFixtureDate(fixture.kickoff)}T${kickoffTime}`}>
-        {kickoffTime}
+      <time className="fixture-kickoff-time" dateTime={dateTime}>
+        <span>{center.primary}</span>
+        {center.secondary ? (
+          <small className={liveStatuses.has(fixture.statusShort ?? "") ? "is-live" : ""}>
+            {center.secondary}
+          </small>
+        ) : null}
       </time>
       <FixtureTeam
         code={fixture.awayTeam}
@@ -251,91 +306,6 @@ function FixtureMatchRow({
         ownerName={displayNamesByTeam.get(fixture.awayTeam)}
         side="away"
       />
-    </div>
-  );
-}
-
-export function FixtureFilters({
-  activeFilter,
-  onFilterChange,
-  onGroupChange,
-  selectedGroup,
-}: FixtureFiltersProps) {
-  const [groupMenuOpen, setGroupMenuOpen] = useState(false);
-
-  function handleFilterClick(filter: FixtureFilter) {
-    if (filter === "Group") {
-      onFilterChange("Group");
-      setGroupMenuOpen((isOpen) => (activeFilter === "Group" ? !isOpen : true));
-      return;
-    }
-
-    onFilterChange(filter);
-    setGroupMenuOpen(false);
-  }
-
-  return (
-    <div className="fixture-filter-area">
-      <div
-        className="filter-row fixture-filter-row fixture-filter-row-fill"
-        aria-label="Fixture filters"
-      >
-        {filters.map((filter) => (
-          <button
-            key={filter}
-            aria-controls={filter === "Group" ? "fixture-group-options" : undefined}
-            aria-expanded={filter === "Group" ? groupMenuOpen : undefined}
-            aria-haspopup={filter === "Group" ? "listbox" : undefined}
-            aria-pressed={activeFilter === filter}
-            className={[
-              "filter-chip",
-              "fixture-filter-chip",
-              filter === "Group" ? "fixture-filter-chip-group" : "",
-              activeFilter === filter ? "active" : "",
-            ]
-              .filter(Boolean)
-              .join(" ")}
-            type="button"
-            onClick={() => handleFilterClick(filter)}
-          >
-            {filter}
-            {filter === "Group" ? (
-              <ChevronDown
-                aria-hidden="true"
-                className={groupMenuOpen ? "fixture-group-chevron open" : "fixture-group-chevron"}
-                size={16}
-                strokeWidth={2.2}
-              />
-            ) : null}
-          </button>
-        ))}
-      </div>
-
-      {groupMenuOpen ? (
-        <div
-          aria-label="Select group"
-          className="fixture-group-menu"
-          id="fixture-group-options"
-          role="listbox"
-        >
-          {groupOptions.map((group) => (
-            <button
-              key={group}
-              aria-selected={selectedGroup === group}
-              className={`fixture-group-option${selectedGroup === group ? " selected" : ""}`}
-              role="option"
-              type="button"
-              onClick={() => {
-                onGroupChange(group);
-                onFilterChange("Group");
-                setGroupMenuOpen(false);
-              }}
-            >
-              Group {group}
-            </button>
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 }

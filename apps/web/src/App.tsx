@@ -26,11 +26,12 @@ export default function App() {
         initialMessage={session.sessionError}
         mode={session.participant ? "change" : "create"}
         onSelectionSaved={session.handleSelectionSaved}
+        onSkip={session.skipSelection}
       />
     );
   }
 
-  if (!session.participant) {
+  if (!session.participant && session.mode !== "home") {
     return (
       <div className="screen-state">
         <div className="screen-state-card">
@@ -50,7 +51,7 @@ export default function App() {
   return (
     <AppShell
       brandName={session.brandName}
-      participant={session.participant}
+      participant={session.participant ?? null}
       onChangeTeam={session.startTeamChange}
       onResetDevice={session.resetDevice}
     />

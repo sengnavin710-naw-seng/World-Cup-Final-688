@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import App from "../../App";
+import { renderWithQueryClient as render } from "../../test/renderWithQueryClient";
 import { TeamSelectionScreen } from "./TeamSelectionScreen";
 
 const BURMESE_NAME = "\u1019\u1004\u103a\u1038";

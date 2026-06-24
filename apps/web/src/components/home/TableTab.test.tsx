@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import { readFileSync } from "node:fs";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { vi } from "vitest";
 import type { GroupStanding } from "../../lib/types";
 import { TableTab } from "./TableTab";
 
@@ -68,7 +69,11 @@ test("renders full standings in a responsive horizontal table", () => {
   );
 
   expect(container.querySelector(".group-cards-grid")).toHaveClass("table-mode-full");
-  expect(container.querySelector(".group-table-scroll")).toBeInTheDocument();
+  expect(container.querySelector(".group-table-scroll")).toHaveClass("table-mode-full");
+  expect(container.querySelector(".group-table-scroll")).toHaveAttribute(
+    "data-tab-swipe-ignore",
+    "true",
+  );
   expect(container.querySelector(".group-table-content")).toHaveClass("table-mode-full");
   expect(container.querySelector(".compact-table")).toHaveClass("table-mode-full");
 });
@@ -77,7 +82,7 @@ test("keeps full table team names readable at small and large widths", () => {
   const applicationStyles = readFileSync("src/styles.css", "utf8");
 
   expect(applicationStyles).toMatch(
-    /\.group-table-scroll\s*\{[\s\S]*?overflow-x:\s*auto;/,
+    /\.group-table-scroll\.table-mode-full\s*\{[\s\S]*?overflow-x:\s*auto;/,
   );
   expect(applicationStyles).toMatch(
     /\.group-table-content\.table-mode-full\s*\{[\s\S]*?min-width:\s*560px;/,
@@ -87,5 +92,48 @@ test("keeps full table team names readable at small and large widths", () => {
   );
   expect(applicationStyles).toMatch(
     /\.group-cards-grid\.table-mode-full\s*\{[\s\S]*?minmax\(560px,\s*1fr\)/,
+  );
+});
+
+test("lets short table gestures bubble to the tab swipe handler", () => {
+  const handleParentTouchStart = vi.fn();
+  const handleParentTouchEnd = vi.fn();
+  const { container } = render(
+    <div onTouchEnd={handleParentTouchEnd} onTouchStart={handleParentTouchStart}>
+      <TableTab
+        companyPicks={[]}
+        scopeMode="Overall"
+        standings={standings}
+        tableMode="Short"
+      />
+    </div>,
+  );
+
+  const tableScroll = container.querySelector(".group-table-scroll");
+  expect(tableScroll).not.toBeNull();
+
+  fireEvent.touchStart(tableScroll!);
+  fireEvent.touchEnd(tableScroll!);
+
+  expect(handleParentTouchStart).toHaveBeenCalledTimes(1);
+  expect(handleParentTouchEnd).toHaveBeenCalledTimes(1);
+});
+
+test("keeps short standings out of a nested horizontal scroll area", () => {
+  const { container } = render(
+    <TableTab
+      companyPicks={[]}
+      scopeMode="Overall"
+      standings={standings}
+      tableMode="Short"
+    />,
+  );
+  const applicationStyles = readFileSync("src/styles.css", "utf8");
+  const tableScroll = container.querySelector(".group-table-scroll");
+
+  expect(tableScroll).not.toHaveClass("table-mode-full");
+  expect(tableScroll).not.toHaveAttribute("data-tab-swipe-ignore");
+  expect(applicationStyles).toMatch(
+    /\.group-table-scroll\s*\{[^}]*overflow:\s*visible;/,
   );
 });

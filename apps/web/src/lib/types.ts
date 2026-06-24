@@ -20,6 +20,10 @@ export type KnockoutRound = {
     id: string;
     homeTeam: string;
     awayTeam: string;
+    homeTeamConfirmed?: boolean;
+    awayTeamConfirmed?: boolean;
+    homeTeamPlaceholder?: string;
+    awayTeamPlaceholder?: string;
     homeScore: number;
     awayScore: number;
     kickoff: string;
@@ -45,6 +49,11 @@ export type Fixture = {
   awayFlag: string;
   kickoff: string;
   venue: string;
+  homeScore?: number | null;
+  awayScore?: number | null;
+  statusElapsed?: number | null;
+  statusLong?: string;
+  statusShort?: string;
 };
 
 export type GroupStanding = {

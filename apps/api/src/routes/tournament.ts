@@ -18,18 +18,26 @@ tournamentRouter.get("/teams", async (_req, res, next) => {
   }
 });
 
-tournamentRouter.get("/knockout", (_req, res) => {
-  res.json({ knockout: getKnockoutRounds() });
+tournamentRouter.get("/knockout", async (_req, res, next) => {
+  try {
+    res.json({ knockout: await getKnockoutRounds() });
+  } catch (error) {
+    next(error);
+  }
 });
 
-tournamentRouter.get("/fixtures", (_req, res) => {
-  res.json({ fixtures: getFixtures() });
+tournamentRouter.get("/fixtures", async (_req, res, next) => {
+  try {
+    res.json({ fixtures: await getFixtures() });
+  } catch (error) {
+    next(error);
+  }
 });
 
 tournamentRouter.get("/table", async (_req, res, next) => {
   try {
     res.json({
-      standings: getStandings(),
+      standings: await getStandings(),
       companyPicks: await getCompanyPicks(),
     });
   } catch (error) {
