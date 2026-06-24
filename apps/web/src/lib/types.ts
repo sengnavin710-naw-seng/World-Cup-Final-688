@@ -108,6 +108,11 @@ export type NewsItem = {
   id: string;
   title: string;
   summary: string;
+  link?: string;
+  imageUrl?: string;
+  pubDate?: string;
+  author?: string;
+  source?: string;
   isFeatured?: boolean;
   teamCode?: string;
 };
