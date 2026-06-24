@@ -1018,8 +1018,7 @@ button {
 
 .knockout-board-scroll {
   width: 100%;
-  overflow-x: auto;
-  padding: 16px 20px 20px;
+  overflow: hidden;
   overscroll-behavior-x: contain;
 }
 

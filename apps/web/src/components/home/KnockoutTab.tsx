@@ -46,19 +46,17 @@ type ResolvedKnockoutTeam = {
 };
 
 // ─── Desktop board geometry ───────────────────────────────────────────────
-// Card:  130 × 104 px  (wide enough for full team name + owner display name)
-// Board: 1600 × 800 px
+// Card:  130 × 104 px
+// Board: 1600 × 1050 px
 //
-// Column layout (4 rounds per side, symmetric):
-//   Left  col-1 x=0,   col-2 x=212, col-3 x=412, col-4 x=598
-//   Right col-1 x=1470, col-2 x=1258, col-3 x=1058, col-4 x=872
-//   Center x = (1600-130)/2 = 735
-//
-// Row centers for 8 slots (col-1), 4 slots (col-2), 2 slots (col-3), 1 slot (col-4):
-//   Vertical spacing: board height 800, 8 rows → ~84px pitch
+// Col-1: 8 matches, pitch = 131px, centers = 65,196,327,458,589,720,851,982
+//   gap between cards = 131 - 104 = 27px ✓
+// Col-2: 4 matches, centers = midpoint of each col-1 pair
+// Col-3: 2 matches
+// Col-4: 1 match (center of board)
 const board = {
   width: 1600,
-  height: 800,
+  height: 1050,
   cardWidth: 130,
   cardHeight: 104,
 };
@@ -77,16 +75,15 @@ const rightColumnX = new Map([
   [4, 872],
 ]);
 
-// Row center Y for each column × slot (8 slots in col-1, halved per column)
-// Col-1: 8 matches → pitch = 800/8 = 100, centers at 50,150,250,350,450,550,650,750
-// Col-2: 4 matches → centers at mid of each pair: 100,300,500,700
-// Col-3: 2 matches → centers at 200,600
-// Col-4: 1 match  → center at 400
+// pitch = 1050/8 = 131.25 → centers at 65, 196, 327, 458, 589, 720, 851, 982
+// col-2 centers = midpoints of col-1 pairs: 131, 393, 655, 917
+// col-3 centers: 262, 786  → rounded to 262, 786
+// col-4 center: 524
 const rowCenters = new Map([
-  [1, [50, 150, 250, 350, 450, 550, 650, 750]],
-  [2, [100, 300, 500, 700]],
-  [3, [200, 600]],
-  [4, [400]],
+  [1, [65, 196, 327, 458, 589, 720, 851, 982]],
+  [2, [131, 393, 655, 917]],
+  [3, [262, 786]],
+  [4, [524]],
 ]);
 
 const mobileBoard = {
@@ -128,7 +125,8 @@ function getMatchPosition(match: KnockoutMatch) {
   if (match.side === "center") {
     return {
       x: (board.width - board.cardWidth) / 2,
-      y: (slot === 1 ? 420 : 570) - board.cardHeight / 2,
+      // Final at ~55% height, Bronze at ~72% height
+      y: (slot === 1 ? Math.round(board.height * 0.55) : Math.round(board.height * 0.72)) - board.cardHeight / 2,
     };
   }
 
@@ -859,6 +857,8 @@ export function KnockoutTab({
   const [mobileScrollLeft, setMobileScrollLeft] = useState(0);
   const [mobileViewportWidth, setMobileViewportWidth] = useState(0);
   const mobileBoardScrollRef = useRef<HTMLDivElement | null>(null);
+  const boardScrollRef = useRef<HTMLDivElement | null>(null);
+  const [boardScale, setBoardScale] = useState(1);
   const mobileRoundButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const mobileTouchStartRef = useRef<MobileTouchStart | null>(null);
   const mobileSnapTargetRef = useRef<MobileSnapTarget | null>(null);
@@ -901,6 +901,20 @@ export function KnockoutTab({
       ),
     [mobileLayout.roundOffsets, mobileScrollLeft],
   );
+
+  // Auto-scale desktop board to fit container width without horizontal scroll
+  useEffect(() => {
+    const el = boardScrollRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      const containerWidth = entries[0]?.contentRect.width ?? el.clientWidth;
+      if (containerWidth > 0) {
+        setBoardScale(Math.min(1, containerWidth / board.width));
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!rounds.length) {
@@ -1252,13 +1266,19 @@ export function KnockoutTab({
   return (
     <div className="knockout-shell">
 
-      <div className="knockout-board-scroll">
+      <div
+        className="knockout-board-scroll"
+        ref={boardScrollRef}
+        style={{ height: `${Math.round(board.height * boardScale)}px` }}
+      >
         <section
           aria-label="World Cup knockout bracket"
           className="knockout-board"
           style={{
             "--knockout-board-width": `${board.width}px`,
             "--knockout-board-height": `${board.height}px`,
+            transform: boardScale < 1 ? `scale(${boardScale})` : undefined,
+            transformOrigin: "top left",
           } as CSSProperties}
         >
           <svg
