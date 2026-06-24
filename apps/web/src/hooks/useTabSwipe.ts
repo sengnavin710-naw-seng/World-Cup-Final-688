@@ -412,18 +412,11 @@ export function useTabSwipe({
         return;
       }
 
-      let captured = false;
-      if (typeof event.currentTarget.setPointerCapture === "function") {
-        try {
-          event.currentTarget.setPointerCapture(event.pointerId);
-          captured = true;
-        } catch {
-          captured = false;
-        }
-      }
-
+      // Don't setPointerCapture immediately — wait until intent is confirmed
+      // as horizontal in onPointerMove. Capturing too early prevents child
+      // buttons from receiving click events on the first tap (touchpad bug).
       activeGestureRef.current = {
-        captured,
+        captured: false,
         intent: "pending",
         pointerId: event.pointerId,
         startTime: event.timeStamp,
@@ -458,6 +451,20 @@ export function useTabSwipe({
           Math.abs(distanceX) > Math.abs(distanceY) * HORIZONTAL_INTENT_RATIO
             ? "horizontal"
             : "vertical";
+
+        // Only capture the pointer once we know it's a horizontal swipe.
+        // This lets buttons receive the click on the first tap.
+        if (gesture.intent === "horizontal" && !gesture.captured) {
+          const el = event.currentTarget;
+          if (typeof el.setPointerCapture === "function") {
+            try {
+              el.setPointerCapture(event.pointerId);
+              gesture.captured = true;
+            } catch {
+              // ignore
+            }
+          }
+        }
       }
 
       if (gesture.intent === "vertical") {
