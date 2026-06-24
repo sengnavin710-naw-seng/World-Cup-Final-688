@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { useState } from "react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { useState, type ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { HomeTab } from "../../lib/tournamentQueries";
 import { TabCarousel } from "./TabCarousel";
@@ -62,6 +62,89 @@ function Harness({ reducedMotion = false }: { reducedMotion?: boolean }) {
   );
 }
 
+function RenderCountingHarness({
+  renderTab,
+}: {
+  renderTab: (tab: HomeTab) => ReactElement;
+}) {
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  return (
+    <TabCarousel
+      activeIndex={activeIndex}
+      onActiveIndexChange={setActiveIndex}
+      reducedMotion={false}
+      renderTab={renderTab}
+      tabs={tabs}
+    />
+  );
+}
+
+function RequestHarness() {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [requestId, setRequestId] = useState(0);
+  const [motionText, setMotionText] = useState("0:null:idle");
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setRequestId((current) => current + 1)}
+      >
+        Request News
+      </button>
+      <output data-testid="motion-state">{motionText}</output>
+      <TabCarousel
+        activeIndex={activeIndex}
+        navigationRequest={
+          requestId > 0 ? { id: requestId, index: 3 } : null
+        }
+        onActiveIndexChange={setActiveIndex}
+        onMotionStateChange={(state) =>
+          setMotionText(
+            `${state.visualIndex}:${state.pendingIndex}:${state.phase}`,
+          )
+        }
+        reducedMotion={false}
+        renderTab={(tab: HomeTab) => <div>{`${tab} content`}</div>}
+        tabs={tabs}
+      />
+    </>
+  );
+}
+
+function UnstableMotionCallbackHarness() {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [notifications, setNotifications] = useState<string[]>([]);
+
+  return (
+    <>
+      <output data-testid="motion-notification-count">
+        {notifications.length}
+      </output>
+      <TabCarousel
+        activeIndex={activeIndex}
+        onActiveIndexChange={setActiveIndex}
+        onMotionStateChange={(state) => {
+          setNotifications((current) => {
+            if (current.length > 1) {
+              throw new Error("motion state notified repeatedly");
+            }
+
+            return [
+              ...current,
+              `${state.visualIndex}:${state.pendingIndex}:${state.phase}`,
+            ];
+          });
+        }}
+        reducedMotion={false}
+        renderTab={(tab: HomeTab) => <div>{`${tab} content`}</div>}
+        tabs={tabs}
+      />
+    </>
+  );
+}
+
 function setViewportWidth(viewport: HTMLElement, width: number) {
   Object.defineProperty(viewport, "clientWidth", {
     configurable: true,
@@ -91,6 +174,39 @@ function firePointerEvent(
     pointerId: { value: pointerId },
   });
   fireEvent(viewport, event);
+}
+
+function fireTransitionEndEvent(target: HTMLElement, propertyName: string) {
+  const event = new Event("transitionend", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "propertyName", { value: propertyName });
+  fireEvent(target, event);
+}
+
+function installAnimationFrameClock() {
+  let nextFrameId = 1;
+  const callbacks = new Map<number, FrameRequestCallback>();
+
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+    const frameId = nextFrameId;
+    nextFrameId += 1;
+    callbacks.set(frameId, callback);
+    return frameId;
+  });
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation((frameId) => {
+    callbacks.delete(frameId);
+  });
+
+  const advance = (timestamp: number) => {
+    const pendingCallbacks = [...callbacks.values()];
+    callbacks.clear();
+    act(() => {
+      pendingCallbacks.forEach((callback) => callback(timestamp));
+    });
+  };
+
+  return {
+    advance,
+  };
 }
 
 function swipeLeft(viewport: HTMLElement, pointerId: number) {
@@ -156,9 +272,11 @@ describe("TabCarousel", () => {
   test("advances exactly one slide after a qualifying left gesture", () => {
     render(<Harness />);
     const viewport = screen.getByLabelText("Tournament tabs");
+    const track = screen.getByTestId("tab-carousel-track");
     setViewportWidth(viewport, 390);
 
     swipeLeft(viewport, 1);
+    fireTransitionEndEvent(track, "transform");
 
     expect(screen.getByText("Table content")).toBeInTheDocument();
     expect(screen.queryByText("News content")).not.toBeInTheDocument();
@@ -167,10 +285,13 @@ describe("TabCarousel", () => {
   test("stops at Table after two rapid qualifying gestures", () => {
     render(<Harness />);
     const viewport = screen.getByLabelText("Tournament tabs");
+    const track = screen.getByTestId("tab-carousel-track");
     setViewportWidth(viewport, 390);
 
     swipeLeft(viewport, 1);
+    fireTransitionEndEvent(track, "transform");
     swipeLeft(viewport, 2);
+    fireTransitionEndEvent(track, "transform");
 
     expect(screen.getByTestId("tab-slide-Table")).not.toHaveAttribute(
       "aria-hidden",
@@ -196,6 +317,7 @@ describe("TabCarousel", () => {
   test("observes only the active slide for viewport height", () => {
     render(<Harness />);
     const viewport = screen.getByLabelText("Tournament tabs");
+    const track = screen.getByTestId("tab-carousel-track");
     const knockoutSlide = screen.getByTestId("tab-slide-Knockout");
     const fixturesSlide = screen.getByTestId("tab-slide-Fixtures");
     const tableSlide = screen.getByTestId("tab-slide-Table");
@@ -209,6 +331,7 @@ describe("TabCarousel", () => {
 
     setViewportWidth(viewport, 390);
     swipeLeft(viewport, 1);
+    fireTransitionEndEvent(track, "transform");
 
     const fixturesObserver = findObserverFor(fixturesSlide);
 
@@ -240,5 +363,84 @@ describe("TabCarousel", () => {
     expect(screen.getByTestId("tab-carousel-track")).toHaveStyle({
       transition: "none",
     });
+  });
+
+  test("animates a far navigation request without committing early", () => {
+    const frameClock = installAnimationFrameClock();
+    render(<RequestHarness />);
+    const viewport = screen.getByLabelText("Tournament tabs");
+    const track = screen.getByTestId("tab-carousel-track");
+    setViewportWidth(viewport, 390);
+
+    fireEvent.click(screen.getByRole("button", { name: "Request News" }));
+    frameClock.advance(16);
+
+    expect(track.style.transform).toBe("translate3d(-1170px, 0, 0)");
+    expect(track.style.transition).toBe(
+      "transform 300ms cubic-bezier(0.4, 0, 0.2, 1)",
+    );
+    expect(screen.getByTestId("motion-state")).toHaveTextContent(
+      "3:3:settling",
+    );
+    expect(screen.getByTestId("tab-slide-Knockout")).not.toHaveAttribute(
+      "aria-hidden",
+    );
+
+    fireTransitionEndEvent(track, "transform");
+
+    expect(screen.getByTestId("tab-slide-News")).not.toHaveAttribute(
+      "aria-hidden",
+    );
+  });
+
+  test("does not rerender tab contents for repeated drag-frame visual updates", () => {
+    const frameClock = installAnimationFrameClock();
+    const renderTab = vi.fn((tab: HomeTab) => <div>{`${tab} content`}</div>);
+    render(<RenderCountingHarness renderTab={renderTab} />);
+    const viewport = screen.getByLabelText("Tournament tabs");
+    setViewportWidth(viewport, 390);
+
+    firePointerEvent(viewport, "pointerdown", {
+      clientX: 300,
+      clientY: 100,
+      pointerId: 1,
+    });
+    firePointerEvent(viewport, "pointermove", {
+      clientX: 220,
+      clientY: 102,
+      pointerId: 1,
+    });
+    frameClock.advance(16);
+    const callsAfterFirstDragFrame = renderTab.mock.calls.length;
+
+    firePointerEvent(viewport, "pointermove", {
+      clientX: 160,
+      clientY: 102,
+      pointerId: 1,
+    });
+    frameClock.advance(32);
+
+    expect(renderTab).toHaveBeenCalledTimes(callsAfterFirstDragFrame);
+  });
+
+  test("mounts source, target, and target neighbor slides while settling", () => {
+    render(<RequestHarness />);
+    const viewport = screen.getByLabelText("Tournament tabs");
+    setViewportWidth(viewport, 390);
+
+    fireEvent.click(screen.getByRole("button", { name: "Request News" }));
+
+    expect(screen.getByText("Knockout content")).toBeInTheDocument();
+    expect(screen.getByText("Fixtures content")).toBeInTheDocument();
+    expect(screen.getByText("Table content")).toBeInTheDocument();
+    expect(screen.getByText("News content")).toBeInTheDocument();
+  });
+
+  test("does not replay unchanged motion state for unstable callbacks", () => {
+    render(<UnstableMotionCallbackHarness />);
+
+    expect(screen.getByTestId("motion-notification-count")).toHaveTextContent(
+      "1",
+    );
   });
 });

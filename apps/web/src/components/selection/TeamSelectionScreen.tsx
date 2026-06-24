@@ -13,6 +13,7 @@ type TeamSelectionScreenProps = {
   currentTeamCode?: string;
   initialMessage?: string;
   onSelectionSaved: (value: ParticipantSession) => void;
+  onSkip?: () => void;
 };
 
 export function TeamSelectionScreen({
@@ -22,6 +23,7 @@ export function TeamSelectionScreen({
   initialMessage = "",
   mode,
   onSelectionSaved,
+  onSkip,
 }: TeamSelectionScreenProps) {
   const [teams, setTeams] = useState<Team[]>([]);
   const [search, setSearch] = useState("");
@@ -156,13 +158,22 @@ export function TeamSelectionScreen({
         ) : null}
       </div>
 
-      <div className={`selection-sticky-bar${selectedTeam ? " visible" : ""}`}>
+      <div className={`selection-sticky-bar${selectedTeam || onSkip ? " visible" : ""}`}>
         <div className="selection-sticky-content">
           <div className="selection-sticky-copy">
             <span className="summary-label">Selected Team</span>
             <strong>{selectedTeam?.name ?? "Choose a team"}</strong>
           </div>
           <div className="selection-actions">
+            {onSkip ? (
+              <button
+                className="primary-button skip-button"
+                type="button"
+                onClick={onSkip}
+              >
+                Skip
+              </button>
+            ) : null}
             <button
               className="primary-button"
               disabled={!selectedTeamCode || submitting}

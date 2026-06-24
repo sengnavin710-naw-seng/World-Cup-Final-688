@@ -156,3 +156,53 @@ test("shows a display name beneath picked fixture teams", () => {
   expect(screen.getByText(BURMESE_NAME)).toBeInTheDocument();
   expect(screen.getByText(BURMESE_NAME)).toHaveClass("team-owner-name");
 });
+
+test("shows a real score and match status for completed API fixtures", () => {
+  render(
+    <FixturesTab
+      companyPicks={[]}
+      fixtures={[
+        {
+          ...fixtures[0],
+          awayScore: 1,
+          homeScore: 2,
+          kickoff: "2026-06-11T19:00:00+00:00",
+          statusElapsed: 90,
+          statusLong: "Match Finished",
+          statusShort: "FT",
+        },
+      ]}
+      participantTeamCode="MEX"
+    />,
+  );
+
+  expect(screen.getByText("2 - 1")).toBeInTheDocument();
+  expect(screen.getByText("FT")).toBeInTheDocument();
+  expect(screen.getByText("2 - 1").closest("time")).toHaveAttribute(
+    "datetime",
+    "2026-06-11T19:00:00+00:00",
+  );
+});
+
+test("shows elapsed time for a live API fixture", () => {
+  render(
+    <FixturesTab
+      companyPicks={[]}
+      fixtures={[
+        {
+          ...fixtures[0],
+          awayScore: 1,
+          homeScore: 2,
+          kickoff: "2026-06-11T19:00:00+00:00",
+          statusElapsed: 67,
+          statusLong: "Second Half",
+          statusShort: "2H",
+        },
+      ]}
+      participantTeamCode="MEX"
+    />,
+  );
+
+  expect(screen.getByText("2 - 1")).toBeInTheDocument();
+  expect(screen.getByText("67'")).toBeInTheDocument();
+});

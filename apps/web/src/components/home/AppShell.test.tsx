@@ -10,6 +10,36 @@ import {
 import App from "../../App";
 import { renderWithQueryClient as render } from "../../test/renderWithQueryClient";
 
+class ControlledResizeObserver implements ResizeObserver {
+  readonly observedTargets = new Set<Element>();
+
+  constructor(private readonly callback: ResizeObserverCallback) {
+    controlledResizeObservers.push(this);
+  }
+
+  disconnect = vi.fn(() => {
+    this.observedTargets.clear();
+  });
+
+  observe = vi.fn((target: Element) => {
+    this.observedTargets.add(target);
+  });
+
+  unobserve = vi.fn((target: Element) => {
+    this.observedTargets.delete(target);
+  });
+
+  trigger(target: Element) {
+    if (!this.observedTargets.has(target)) {
+      return;
+    }
+
+    this.callback([{ target } as ResizeObserverEntry], this);
+  }
+}
+
+let controlledResizeObservers: ControlledResizeObserver[] = [];
+
 function deferredResponse() {
   let resolve!: (response: Response) => void;
   const promise = new Promise<Response>((resolver) => {
@@ -36,7 +66,40 @@ function setReducedMotionPreference(matches: boolean) {
   });
 }
 
+function fireTransitionEndEvent(target: HTMLElement, propertyName: string) {
+  const event = new Event("transitionend", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "propertyName", { value: propertyName });
+  fireEvent(target, event);
+}
+
+function installAnimationFrameClock() {
+  let nextFrameId = 1;
+  const callbacks = new Map<number, FrameRequestCallback>();
+
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+    const frameId = nextFrameId;
+    nextFrameId += 1;
+    callbacks.set(frameId, callback);
+    return frameId;
+  });
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation((frameId) => {
+    callbacks.delete(frameId);
+  });
+
+  return {
+    advance(timestamp: number) {
+      const pendingCallbacks = [...callbacks.values()];
+      callbacks.clear();
+      act(() => {
+        pendingCallbacks.forEach((callback) => callback(timestamp));
+      });
+    },
+  };
+}
+
 beforeEach(() => {
+  controlledResizeObservers = [];
+  vi.stubGlobal("ResizeObserver", ControlledResizeObserver);
   setReducedMotionPreference(false);
   Object.defineProperty(window, "requestIdleCallback", {
     configurable: true,
@@ -244,6 +307,85 @@ test("prefetches the destination on tab focus", async () => {
   });
 });
 
+test("renders one shared tab indicator instead of per-button underlines", async () => {
+  render(<App />);
+  await screen.findByLabelText("World Cup knockout bracket");
+
+  const tabsNav = screen.getByLabelText("Home tabs");
+  const applicationStyles = readFileSync("src/styles.css", "utf8");
+
+  expect(tabsNav.querySelector(".tab-indicator")).toBeInTheDocument();
+  expect(applicationStyles).toContain(".tab-indicator");
+  expect(applicationStyles).not.toContain(".tab-button::after");
+});
+
+test("recalculates the shared tab indicator when the tab row layout changes", async () => {
+  render(<App />);
+  await screen.findByLabelText("World Cup knockout bracket");
+
+  const tabsNav = screen.getByLabelText("Home tabs");
+  const knockoutTab = screen.getByRole("tab", { name: "Knockout" });
+  const indicator = tabsNav.querySelector<HTMLElement>(".tab-indicator");
+
+  Object.defineProperties(knockoutTab, {
+    offsetLeft: { configurable: true, value: 18 },
+    offsetWidth: { configurable: true, value: 124 },
+  });
+
+  const tabsObserver = controlledResizeObservers.find((observer) =>
+    observer.observedTargets.has(tabsNav),
+  );
+
+  expect(tabsObserver).toBeDefined();
+  act(() => tabsObserver?.trigger(tabsNav));
+
+  expect(indicator).toHaveStyle({
+    transform: "translate3d(18px, 0, 0)",
+    width: "124px",
+  });
+});
+
+test("disables the shared tab indicator transition for reduced motion", async () => {
+  setReducedMotionPreference(true);
+  render(<App />);
+  await screen.findByLabelText("World Cup knockout bracket");
+
+  const indicator = screen
+    .getByLabelText("Home tabs")
+    .querySelector<HTMLElement>(".tab-indicator");
+
+  expect(indicator).toHaveStyle({ transition: "none" });
+});
+
+test("clicking a far tab keeps the current tab selected until carousel settle ends", async () => {
+  const frameClock = installAnimationFrameClock();
+  render(<App />);
+  await screen.findByLabelText("World Cup knockout bracket");
+
+  const track = screen.getByTestId("tab-carousel-track");
+  const viewport = screen.getByLabelText("Tournament tabs");
+  Object.defineProperty(viewport, "clientWidth", {
+    configurable: true,
+    value: 390,
+  });
+
+  fireEvent.click(screen.getByRole("tab", { name: "News" }));
+  frameClock.advance(16);
+
+  expect(track.style.transform).toBe("translate3d(-1170px, 0, 0)");
+  expect(screen.getByRole("tab", { name: "Knockout" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+
+  fireTransitionEndEvent(track, "transform");
+
+  expect(screen.getByRole("tab", { name: "News" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+});
+
 test("uses local loading and error states when a tab has no cached data", async () => {
   const pendingNews = deferredResponse();
   const currentFetch = global.fetch;
@@ -378,6 +520,7 @@ test("moves from the knockout bracket to fixtures after a very fast forward swip
   render(<App />);
 
   const mobileBracket = await screen.findByLabelText("World Cup knockout rounds");
+  const track = screen.getByTestId("tab-carousel-track");
   const scroller = mobileBracket.querySelector(".knockout-mobile-bracket-scroll");
   expect(scroller).toBeInstanceOf(HTMLDivElement);
 
@@ -404,6 +547,8 @@ test("moves from the knockout bracket to fixtures after a very fast forward swip
   });
   Object.defineProperty(touchEnd, "timeStamp", { value: 1_100 });
   fireEvent(scroller!, touchEnd);
+
+  fireTransitionEndEvent(track, "transform");
 
   expect(screen.getByRole("tab", { name: "Fixtures" })).toHaveAttribute(
     "aria-selected",
@@ -466,6 +611,7 @@ test("defines the carousel layout and local tab states", () => {
   expect(applicationStyles).toContain(".tab-local-skeleton");
   expect(applicationStyles).toContain(".tab-refresh-notice");
   expect(applicationStyles).not.toContain("@keyframes tab-screen-enter-right");
+  expect(applicationStyles).not.toMatch(/\.tab-button:hover\s*\{/);
 });
 
 test("uses compact mobile spacing around fixture date headings", () => {

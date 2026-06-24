@@ -14,6 +14,7 @@ type SessionState = {
   sessionError: string;
   handleSelectionSaved: (value: ParticipantSession) => void;
   retrySession: () => void;
+  skipSelection: () => void;
   startTeamChange: () => void;
   resetDevice: () => Promise<void>;
 };
@@ -64,11 +65,8 @@ export function useParticipantSession(): SessionState {
         }
 
         if (hasLocalParticipant) {
-          setParticipant(localParticipant);
-          setMode("home");
-          return;
+          clearDeviceIdentity();
         }
-
         setParticipant(null);
         setMode("selection");
       })
@@ -97,6 +95,10 @@ export function useParticipantSession(): SessionState {
     setMode("home");
   };
 
+  const skipSelection = () => {
+    setMode("home");
+  };
+
   const startTeamChange = () => {
     setSessionError("");
     setMode("selection");
@@ -119,6 +121,7 @@ export function useParticipantSession(): SessionState {
     sessionError,
     handleSelectionSaved,
     retrySession: loadSession,
+    skipSelection,
     startTeamChange,
     resetDevice,
   };

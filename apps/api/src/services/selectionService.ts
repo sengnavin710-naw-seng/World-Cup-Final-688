@@ -1,6 +1,8 @@
 import { getSupabaseClient } from "../lib/supabase";
 import { fixtures, knockout, news, standings, teams } from "../data/tournamentData";
 import type { ParticipantRecord, TeamView } from "../types";
+import { getApiFootballFixtures, getApiFootballStandings } from "./apiFootballService";
+import { projectKnockoutRounds } from "./knockoutProjectionService";
 
 const memoryStore = new Map<string, ParticipantRecord>();
 
@@ -193,16 +195,32 @@ export async function getCompanyPicks() {
     .sort((left, right) => left.teamName.localeCompare(right.teamName));
 }
 
-export function getKnockoutRounds() {
-  return knockout;
+export async function getKnockoutRounds() {
+  let apiFixtures;
+  let apiStandings;
+
+  try {
+    [apiFixtures, apiStandings] = await Promise.all([
+      getApiFootballFixtures(),
+      getApiFootballStandings(),
+    ]);
+  } catch {
+    return knockout;
+  }
+
+  if (!apiFixtures || !apiStandings) {
+    return knockout;
+  }
+
+  return projectKnockoutRounds(knockout, apiStandings, apiFixtures);
 }
 
-export function getFixtures() {
-  return fixtures;
+export async function getFixtures() {
+  return (await getApiFootballFixtures()) ?? fixtures;
 }
 
-export function getStandings() {
-  return standings;
+export async function getStandings() {
+  return (await getApiFootballStandings()) ?? standings;
 }
 
 export function getNews() {

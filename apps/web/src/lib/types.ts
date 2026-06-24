@@ -49,6 +49,11 @@ export type Fixture = {
   awayFlag: string;
   kickoff: string;
   venue: string;
+  homeScore?: number | null;
+  awayScore?: number | null;
+  statusElapsed?: number | null;
+  statusLong?: string;
+  statusShort?: string;
 };
 
 export type GroupStanding = {

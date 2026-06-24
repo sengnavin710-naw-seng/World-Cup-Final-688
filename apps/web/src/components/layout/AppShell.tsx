@@ -4,6 +4,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -21,8 +22,11 @@ import {
 } from "../home/FixtureFilters";
 import { BrandHeader } from "../ui/BrandHeader";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
-import { NotificationPanel } from "../ui/NotificationPanel";
-import { TabCarousel } from "./TabCarousel";
+import {
+  TabCarousel,
+  type TabCarouselMotionState,
+  type TabNavigationRequest,
+} from "./TabCarousel";
 import { TabErrorBoundary } from "./TabErrorBoundary";
 import { TabLoadState, TabRefreshNotice } from "./TabLoadState";
 import {
@@ -39,7 +43,7 @@ const scopeModes = ["Overall", "Home", "Away"] as const;
 
 type AppShellProps = {
   brandName: string;
-  participant: ParticipantSession;
+  participant: ParticipantSession | null;
   onChangeTeam: () => void;
   onResetDevice: () => Promise<void>;
 };
@@ -63,29 +67,37 @@ export function AppShell({
     () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
   );
   const [showMenu, setShowMenu] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
   const [showChangeConfirm, setShowChangeConfirm] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetError, setResetError] = useState("");
   const [resetting, setResetting] = useState(false);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const tabsRef = useRef<HTMLElement | null>(null);
+  const [tabNavigationRequest, setTabNavigationRequest] =
+    useState<TabNavigationRequest | null>(null);
+  const tabMotionRef = useRef<TabCarouselMotionState>({
+    pendingIndex: null,
+    phase: "idle",
+    visualIndex: 0,
+  });
+  const tabIndicatorRef = useRef<HTMLSpanElement | null>(null);
 
   const selectedTeam = useMemo(
     () =>
-      queries.teams.data?.find((team) => team.code === participant.teamCode) ??
+      queries.teams.data?.find((team) => team.code === participant?.teamCode) ??
       null,
-    [participant.teamCode, queries.teams.data],
+    [participant?.teamCode, queries.teams.data],
   );
   const participantFixtureGroup = useMemo(
     () =>
       queries.fixtures.data?.find(
         (fixture) =>
-          fixture.homeTeam === participant.teamCode ||
-          fixture.awayTeam === participant.teamCode,
+          fixture.homeTeam === participant?.teamCode ||
+          fixture.awayTeam === participant?.teamCode,
       )?.group ??
       queries.fixtures.data?.[0]?.group ??
       "A",
-    [participant.teamCode, queries.fixtures.data],
+    [participant?.teamCode, queries.fixtures.data],
   );
   const selectedFixtureGroup = fixtureGroupOverride || participantFixtureGroup;
 
@@ -97,6 +109,23 @@ export function AppShell({
       ]).catch(() => undefined);
     },
     [queryClient],
+  );
+
+  const requestTabNavigation = useCallback(
+    (index: number) => {
+      const targetTab = tabs[index];
+
+      if (!targetTab || index === activeIndex) {
+        return;
+      }
+
+      prefetchTab(targetTab);
+      setTabNavigationRequest((current) => ({
+        id: (current ? current.id : 0) + 1,
+        index,
+      }));
+    },
+    [activeIndex, prefetchTab],
   );
 
   useEffect(() => {
@@ -152,6 +181,80 @@ export function AppShell({
     }
   }, [activeIndex]);
 
+  const updateTabIndicator = useCallback(() => {
+    const indicator = tabIndicatorRef.current;
+    const currentTabMotion = tabMotionRef.current;
+    const visualIndex = Math.min(
+      Math.max(currentTabMotion.visualIndex, 0),
+      tabs.length - 1,
+    );
+    const lowerIndex = Math.floor(visualIndex);
+    const upperIndex = Math.min(lowerIndex + 1, tabs.length - 1);
+    const progress = visualIndex - lowerIndex;
+    const lowerButton = tabRefs.current[lowerIndex];
+    const upperButton = tabRefs.current[upperIndex] || lowerButton;
+
+    if (!indicator || !lowerButton || !upperButton) {
+      return;
+    }
+
+    const left =
+      lowerButton.offsetLeft +
+      (upperButton.offsetLeft - lowerButton.offsetLeft) * progress;
+    const width =
+      lowerButton.offsetWidth +
+      (upperButton.offsetWidth - lowerButton.offsetWidth) * progress;
+
+    const transform = `translate3d(${left}px, 0, 0)`;
+    const transition =
+      prefersReducedMotion || currentTabMotion.phase === "dragging"
+        ? "none"
+        : "transform 300ms cubic-bezier(0.4, 0, 0.2, 1), width 300ms cubic-bezier(0.4, 0, 0.2, 1)";
+    const indicatorWidth = `${width}px`;
+
+    if (indicator.style.transform !== transform) {
+      indicator.style.transform = transform;
+    }
+
+    if (indicator.style.transition !== transition) {
+      indicator.style.transition = transition;
+    }
+
+    if (indicator.style.width !== indicatorWidth) {
+      indicator.style.width = indicatorWidth;
+    }
+  }, [prefersReducedMotion]);
+
+  const handleTabMotionStateChange = useCallback(
+    (nextTabMotion: TabCarouselMotionState) => {
+      tabMotionRef.current = nextTabMotion;
+      updateTabIndicator();
+    },
+    [updateTabIndicator],
+  );
+
+  useLayoutEffect(() => {
+    updateTabIndicator();
+  }, [activeIndex, updateTabIndicator]);
+
+  useLayoutEffect(() => {
+    const tabsElement = tabsRef.current;
+
+    if (!tabsElement || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const resizeObserver = new ResizeObserver(updateTabIndicator);
+    resizeObserver.observe(tabsElement);
+    tabRefs.current.forEach((button) => {
+      if (button) {
+        resizeObserver.observe(button);
+      }
+    });
+
+    return () => resizeObserver.disconnect();
+  }, [updateTabIndicator]);
+
   const renderTabContent = (tab: HomeTab) => {
     if (tab === "Knockout") {
       if (!queries.knockout.data) {
@@ -175,7 +278,7 @@ export function AppShell({
             />
           ) : null}
           <LazyKnockoutTab
-            onFastForwardSwipe={() => setActiveIndex(1)}
+            onFastForwardSwipe={() => requestTabNavigation(1)}
             rounds={queries.knockout.data}
             teams={queries.teams.data ?? []}
           />
@@ -208,7 +311,7 @@ export function AppShell({
             activeFilter={fixtureFilter}
             companyPicks={queries.table.data?.companyPicks ?? []}
             fixtures={queries.fixtures.data}
-            participantTeamCode={participant.teamCode}
+            participantTeamCode={participant?.teamCode ?? ""}
             selectedGroup={selectedFixtureGroup}
             showFilters={false}
           />
@@ -353,10 +456,6 @@ export function AppShell({
                 aria-label="Notifications"
                 className="icon-button"
                 type="button"
-                onClick={() => {
-                  setShowMenu(false);
-                  setShowNotifications((current) => !current);
-                }}
               >
                 <Bell size={18} />
               </button>
@@ -365,13 +464,11 @@ export function AppShell({
                 className="icon-button"
                 type="button"
                 onClick={() => {
-                  setShowNotifications(false);
                   setShowMenu((current) => !current);
                 }}
               >
                 <MoreHorizontal size={18} />
               </button>
-              {showNotifications ? <NotificationPanel /> : null}
               {showMenu ? (
                 <div className="menu-panel">
                   <div className="menu-panel-label">Selected Team</div>
@@ -404,7 +501,7 @@ export function AppShell({
             </div>
           </header>
 
-          <nav aria-label="Home tabs" className="tabs">
+          <nav aria-label="Home tabs" className="tabs" ref={tabsRef}>
             {tabs.map((tab, index) => (
               <button
                 key={tab}
@@ -415,19 +512,26 @@ export function AppShell({
                 className="tab-button"
                 role="tab"
                 type="button"
-                onClick={() => setActiveIndex(index)}
+                onClick={() => requestTabNavigation(index)}
                 onFocus={() => prefetchTab(tab)}
                 onPointerDown={() => prefetchTab(tab)}
               >
                 {tab}
               </button>
             ))}
+            <span
+              aria-hidden="true"
+              className="tab-indicator"
+              ref={tabIndicatorRef}
+            />
           </nav>
         </section>
 
         <TabCarousel
           activeIndex={activeIndex}
+          navigationRequest={tabNavigationRequest}
           onActiveIndexChange={setActiveIndex}
+          onMotionStateChange={handleTabMotionStateChange}
           reducedMotion={prefersReducedMotion}
           renderTab={(tab) => (
             <>
