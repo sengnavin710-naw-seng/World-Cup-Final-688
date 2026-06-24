@@ -3,10 +3,10 @@ import {
   getCompanyPicks,
   getFixtures,
   getKnockoutRounds,
-  getNews,
   getStandings,
   getTeamsWithAvailability,
 } from "../services/selectionService";
+import { getNewsFromRss } from "../services/rssService";
 
 export const tournamentRouter = Router();
 
@@ -45,6 +45,11 @@ tournamentRouter.get("/table", async (_req, res, next) => {
   }
 });
 
-tournamentRouter.get("/news", (_req, res) => {
-  res.json({ news: getNews() });
+tournamentRouter.get("/news", async (_req, res, next) => {
+  try {
+    const news = await getNewsFromRss();
+    res.json({ news });
+  } catch (error) {
+    next(error);
+  }
 });
