@@ -40,6 +40,7 @@ type MobileSnapTarget = {
   targetScrollLeft: number;
 };
 type ResolvedKnockoutTeam = {
+  fullLabel: string;
   label: string;
   ownerName?: string;
   team?: Team;
@@ -288,7 +289,7 @@ function resolveKnockoutTeam(value: string, teams: Team[]): ResolvedKnockoutTeam
       candidate.name.toLowerCase() === normalizedValue,
   );
 
-  // Use 3-letter code for known teams, shorten placeholder names
+  // Use 3-letter code for known teams on desktop, shorten placeholder names
   const label = team
     ? team.code
     : value
@@ -299,7 +300,11 @@ function resolveKnockoutTeam(value: string, teams: Team[]): ResolvedKnockoutTeam
         .replace(/winner match/i, "W.M")
         .trim();
 
+  // Use full name for mobile; fallback to shortened label for placeholders
+  const fullLabel = team ? team.name : label;
+
   return {
+    fullLabel,
     label,
     ownerName: team?.ownedByName,
     team,
@@ -330,12 +335,13 @@ function KnockoutCrest({ teams, value }: { teams: Team[]; value: string }) {
   );
 }
 
-function KnockoutTeamName({ teams, value }: { teams: Team[]; value: string }) {
+function KnockoutTeamName({ mobile, teams, value }: { mobile?: boolean; teams: Team[]; value: string }) {
   const resolved = resolveKnockoutTeam(value, teams);
+  const displayLabel = mobile ? resolved.fullLabel : resolved.label;
 
   return (
     <span className="knockout-team-name">
-      <span className="knockout-team-label">{resolved.label}</span>
+      <span className="knockout-team-label">{displayLabel}</span>
       {resolved.ownerName ? (
         <small className="knockout-owner-name">{resolved.ownerName}</small>
       ) : null}
@@ -813,14 +819,14 @@ function MobileBracketMatchCard({ match, teams }: { match: MobilePositionedMatch
           <div className="knockout-mobile-final-stage">
             <div className="knockout-mobile-final-contender">
               <KnockoutCrest teams={teams} value={match.homeTeam} />
-              <KnockoutTeamName teams={teams} value={match.homeTeam} />
+              <KnockoutTeamName mobile teams={teams} value={match.homeTeam} />
             </div>
             <div className="knockout-mobile-final-trophy" aria-hidden="true">
               <Trophy size={64} strokeWidth={1.35} />
             </div>
             <div className="knockout-mobile-final-contender">
               <KnockoutCrest teams={teams} value={match.awayTeam} />
-              <KnockoutTeamName teams={teams} value={match.awayTeam} />
+              <KnockoutTeamName mobile teams={teams} value={match.awayTeam} />
             </div>
           </div>
           <div className="knockout-mobile-final-meta">
@@ -841,11 +847,11 @@ function MobileBracketMatchCard({ match, teams }: { match: MobilePositionedMatch
             <div className="knockout-mobile-card-teams">
               <div className="knockout-mobile-card-team">
                 <KnockoutCrest teams={teams} value={match.homeTeam} />
-                <KnockoutTeamName teams={teams} value={match.homeTeam} />
+                <KnockoutTeamName mobile teams={teams} value={match.homeTeam} />
               </div>
               <div className="knockout-mobile-card-team">
                 <KnockoutCrest teams={teams} value={match.awayTeam} />
-                <KnockoutTeamName teams={teams} value={match.awayTeam} />
+                <KnockoutTeamName mobile teams={teams} value={match.awayTeam} />
               </div>
             </div>
             <time dateTime={kickoff.dateTime}>{kickoff.label}</time>
