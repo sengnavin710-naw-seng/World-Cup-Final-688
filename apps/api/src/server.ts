@@ -9,9 +9,33 @@ function isUpstreamFetchError(error: Error) {
   return error.message.includes("fetch failed");
 }
 
+// Allowed origins: production domain + local dev
+const ALLOWED_ORIGINS = new Set([
+  "https://seng688.com",
+  "https://www.seng688.com",
+  "http://seng688.com",
+  "http://www.seng688.com",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  // Allow any local network IP during development (192.168.x.x:5173)
+  ...(process.env.NODE_ENV !== "production"
+    ? ["http://192.168.110.119:5173"]
+    : []),
+]);
+
 export function createServer() {
   const app = express();
-  app.use(cors());
+  app.use(
+    cors({
+      origin(origin, callback) {
+        // Allow requests with no origin (mobile apps, curl, server-to-server)
+        if (!origin) return callback(null, true);
+        if (ALLOWED_ORIGINS.has(origin)) return callback(null, true);
+        callback(new Error(`CORS: origin '${origin}' is not allowed`));
+      },
+      credentials: true,
+    }),
+  );
   app.use(express.json());
   app.use((req, res, next) => {
     const requestId =
