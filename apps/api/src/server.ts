@@ -9,7 +9,10 @@ function isUpstreamFetchError(error: Error) {
   return error.message.includes("fetch failed");
 }
 
-// Allowed origins: production domain + local dev
+// Allowed origins — always allow production domain + localhost dev.
+// To add more origins (e.g. local network IP), set CORS_EXTRA_ORIGINS
+// as comma-separated list in the .env file. Example:
+//   CORS_EXTRA_ORIGINS=http://192.168.110.119:5173,http://187.77.140.46:5173
 const ALLOWED_ORIGINS = new Set([
   "https://seng688.com",
   "https://www.seng688.com",
@@ -17,9 +20,8 @@ const ALLOWED_ORIGINS = new Set([
   "http://www.seng688.com",
   "http://localhost:5173",
   "http://127.0.0.1:5173",
-  // Allow any local network IP during development (192.168.x.x:5173)
-  ...(process.env.NODE_ENV !== "production"
-    ? ["http://192.168.110.119:5173"]
+  ...(process.env.CORS_EXTRA_ORIGINS
+    ? process.env.CORS_EXTRA_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean)
     : []),
 ]);
 
