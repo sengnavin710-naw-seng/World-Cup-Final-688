@@ -81,8 +81,9 @@ export function TableTab({ companyPicks, scopeMode, standings, tableMode }: Tabl
                             <span className="team-rank">{index + 1}</span>
                             <TeamLogo code={row.teamCode} flag={row.flag} name={row.team} />
                             <span className="table-team-copy">
-                              <span className="table-team-name">{row.team}</span>
-                              {ownerName ? <small className="team-owner-name">{ownerName}</small> : null}
+                              <span className="table-team-name">
+                                {ownerName ? `${row.team} (${ownerName})` : row.team}
+                              </span>
                             </span>
                           </td>
                           <td>{stats.played}</td>
@@ -95,7 +96,7 @@ export function TableTab({ companyPicks, scopeMode, standings, tableMode }: Tabl
                               <td>{stats.goalsAgainst}</td>
                             </>
                           ) : null}
-                          <td>{stats.goalDiff}</td>
+                          <td>{stats.goalDiff > 0 ? `+${stats.goalDiff}` : stats.goalDiff}</td>
                           <td>{stats.points}</td>
                         </tr>
                       );

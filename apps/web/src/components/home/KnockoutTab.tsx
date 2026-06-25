@@ -341,13 +341,18 @@ function KnockoutTeamName({ mobile, teams, value }: { mobile?: boolean; teams: T
 
   return (
     <span className="knockout-team-name">
-      <span className="knockout-team-label">{displayLabel}</span>
-      {resolved.ownerName ? (
-        <small className="knockout-owner-name">{resolved.ownerName}</small>
+      <span className="knockout-team-label">
+        {mobile && resolved.ownerName
+          ? `${displayLabel} (${resolved.ownerName})`
+          : displayLabel}
+      </span>
+      {!mobile && resolved.ownerName ? (
+        <small className="knockout-owner-name">({resolved.ownerName})</small>
       ) : null}
     </span>
   );
 }
+
 
 function getIndependentMobileRoundCenters(matches: KnockoutRound["matches"]) {
   const centers = new Array<number>(matches.length);
