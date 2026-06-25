@@ -392,6 +392,13 @@ button {
   color: var(--text);
 }
 
+.menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 29;
+  background: transparent;
+}
+
 .menu-panel {
   position: absolute;
   top: calc(100% + 8px);
@@ -422,12 +429,17 @@ button {
 }
 
 .menu-panel button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   width: 100%;
   text-align: left;
   border: none;
   background: transparent;
   padding: 10px 12px;
   border-radius: 8px;
+  font: inherit;
+  cursor: pointer;
 }
 
 .menu-panel button:hover {
@@ -564,10 +576,15 @@ button {
 
 .table-tab-layout,
 .bracket-column,
-.fixture-list,
 .standings-grid {
   display: grid;
   gap: 14px;
+}
+
+.fixture-list {
+  display: grid;
+  gap: 14px;
+  padding-bottom: 32px;
 }
 
 .table-section {
@@ -723,7 +740,7 @@ button {
 }
 
 .group-card-columns.full {
-  grid-template-columns: repeat(8, 40px);
+  grid-template-columns: repeat(7, 40px);
 }
 
 .panel-title {
@@ -745,90 +762,308 @@ button {
 .fixture-tab {
   display: grid;
   gap: 14px;
+  align-content: start;
+  min-height: 70vh;
 }
 
-.fixture-filter-area {
+/* ── Fixture nav bar ── */
+.fixture-nav-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
   position: relative;
-  z-index: 2;
-  max-width: 100%;
+  z-index: 3;
 }
 
-.fixture-filter-row {
-  flex-wrap: nowrap;
-  gap: 10px;
-  margin-bottom: 0;
-  overflow-x: auto;
-  padding-bottom: 2px;
+.fixture-date-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-.fixture-filter-chip {
+.fixture-nav-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
   flex: 0 0 auto;
-  min-width: 92px;
-  padding: 10px 16px;
-  border-color: transparent;
-  background: rgba(232, 246, 255, 0.96);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: white;
   color: var(--text);
+  cursor: pointer;
+  transition: background 120ms, color 120ms, opacity 120ms;
+}
+
+.fixture-nav-arrow:hover {
+  background: var(--surface-alt);
+}
+
+.fixture-nav-arrow:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.fixture-nav-date {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: center;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fixture-mode-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 20px;
+  background: var(--text);
+  color: white;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 120ms;
+}
+
+.fixture-mode-pill:hover {
+  opacity: 0.85;
+}
+
+.fixture-filter-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: white;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+
+.fixture-filter-toggle.active {
+  background: var(--text);
+  color: white;
+  border-color: var(--text);
+}
+
+.fixture-filter-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: transparent;
+}
+
+.fixture-filter-panel {
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: white;
+  box-shadow: 0 20px 48px rgba(28, 83, 114, 0.18), 0 4px 12px rgba(28, 83, 114, 0.1);
+  animation: filterPanelIn 160ms ease;
+}
+
+@keyframes filterPanelIn {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.fixture-filter-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
   font-size: 0.94rem;
   font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms;
 }
 
-.fixture-filter-chip-group {
+.fixture-filter-option:hover {
+  background: var(--surface-alt);
+}
+
+.fixture-filter-option.active {
+  background: rgba(232, 246, 255, 0.96);
+  color: var(--primary);
+}
+
+.fixture-filter-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+  flex: 0 0 auto;
+}
+
+/* ── Date label button (with calendar icon) ── */
+.fixture-date-label-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-}
-
-.fixture-filter-chip.active {
-  background: var(--text);
-  border-color: var(--text);
-  color: white;
-}
-
-.fixture-group-chevron {
-  transition: transform 160ms ease;
-}
-
-.fixture-group-chevron.open {
-  transform: rotate(180deg);
-}
-
-.fixture-group-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  display: grid;
-  width: min(300px, 100%);
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: white;
-  box-shadow: 0 16px 32px rgba(28, 83, 114, 0.16);
-}
-
-.fixture-group-option {
-  min-height: 40px;
-  border: 0;
-  border-radius: 7px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px 6px;
+  border: none;
+  border-radius: 8px;
   background: transparent;
-  color: var(--text);
-  font: inherit;
-  font-size: 0.86rem;
-  font-weight: 500;
   cursor: pointer;
+  font: inherit;
+  transition: background 120ms;
 }
 
-.fixture-group-option:hover,
-.fixture-group-option:focus-visible {
+.fixture-date-label-btn:hover {
   background: var(--surface-alt);
 }
 
-.fixture-group-option.selected {
-  background: var(--text);
-  color: white;
+.fixture-date-label-btn .fixture-nav-date {
+  flex: 0 1 auto;
 }
+
+.cal-icon {
+  flex: 0 0 auto;
+  color: var(--text);
+  opacity: 0.6;
+  position: relative;
+  top: -1px;
+}
+
+/* ── Calendar popup ── */
+.fixture-calendar-popup {
+  z-index: 11;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: white;
+  box-shadow: 0 24px 56px rgba(28, 83, 114, 0.18), 0 4px 16px rgba(28, 83, 114, 0.1);
+  padding: 12px;
+  animation: filterPanelIn 160ms ease;
+  user-select: none;
+}
+
+.cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.cal-month-label {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.cal-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: white;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 120ms;
+}
+
+.cal-nav-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
+.cal-nav-btn:not(:disabled):hover {
+  background: var(--surface-alt);
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.cal-dow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted, #94a3b8);
+  letter-spacing: 0.02em;
+}
+
+.cal-day {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms;
+  gap: 1px;
+}
+
+.cal-day:hover {
+  background: var(--surface-alt);
+}
+
+.cal-day.no-fixture {
+  color: #c0cdd8;
+}
+
+.cal-day.today {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.cal-day.selected {
+  background: var(--primary);
+  color: white;
+  font-weight: 700;
+}
+
+.cal-day.selected:hover {
+  background: var(--primary);
+}
+
 
 .fixture-section-card {
   display: grid;
@@ -1534,11 +1769,18 @@ button {
 
 .knockout-mobile-card-team .knockout-team-name {
   flex: 1 1 auto;
+  display: grid;
   justify-items: start;
+  min-width: 0;
 }
 
 .knockout-mobile-card-team .knockout-owner-name {
   font-size: 0.64rem;
+  color: rgba(255, 255, 255, 0.8);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
 .knockout-mobile-card-body time {
@@ -1596,7 +1838,23 @@ button {
 }
 
 .compact-table td {
-  padding: 12px 0;
+  padding: 7px 0;
+  border-bottom: none;
+}
+
+.compact-table thead th {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 500;
+  text-align: right;
+  padding: 0 0 6px;
+  border-bottom: none;
+  width: 40px;
+}
+
+.compact-table thead th.team-head {
+  text-align: left;
+  width: auto;
 }
 
 .compact-table tr:last-child td,

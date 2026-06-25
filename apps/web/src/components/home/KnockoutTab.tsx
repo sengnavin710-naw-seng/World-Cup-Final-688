@@ -341,12 +341,8 @@ function KnockoutTeamName({ mobile, teams, value }: { mobile?: boolean; teams: T
 
   return (
     <span className="knockout-team-name">
-      <span className="knockout-team-label">
-        {mobile && resolved.ownerName
-          ? `${displayLabel} (${resolved.ownerName})`
-          : displayLabel}
-      </span>
-      {!mobile && resolved.ownerName ? (
+      <span className="knockout-team-label">{displayLabel}</span>
+      {resolved.ownerName ? (
         <small className="knockout-owner-name">({resolved.ownerName})</small>
       ) : null}
     </span>

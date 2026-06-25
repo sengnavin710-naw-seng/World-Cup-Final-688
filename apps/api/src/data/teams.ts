@@ -13,7 +13,7 @@ export const teams: TeamRecord[] = [
   { code: "MAR", name: "Morocco", group: "C", flag: "🇲🇦" },
   { code: "HTI", name: "Haiti", group: "C", flag: "🇭🇹" },
   { code: "SCO", name: "Scotland", group: "C", flag: "🏴" },
-  { code: "USA", name: "United States", group: "D", flag: "🇺🇸" },
+  { code: "USA", name: "USA", group: "D", flag: "🇺🇸" },
   { code: "PAR", name: "Paraguay", group: "D", flag: "🇵🇾" },
   { code: "AUS", name: "Australia", group: "D", flag: "🇦🇺" },
   { code: "TUR", name: "Turkey", group: "D", flag: "🇹🇷" },

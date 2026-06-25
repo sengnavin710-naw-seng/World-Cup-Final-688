@@ -53,23 +53,25 @@ export function TableTab({ companyPicks, scopeMode, standings, tableMode }: Tabl
               <div className={`group-table-content${tableMode === "Full" ? " table-mode-full" : ""}`}>
                 <div className="group-card-head">
                   <strong>{`Grp. ${group.group}`}</strong>
-                  <div className={`group-card-columns ${tableMode === "Full" ? "full" : ""}`} aria-hidden="true">
-                    <span>Pl</span>
-                    {tableMode === "Full" ? (
-                      <>
-                        <span>W</span>
-                        <span>D</span>
-                        <span>L</span>
-                        <span>GF</span>
-                        <span>GA</span>
-                      </>
-                    ) : null}
-                    <span>GD</span>
-                    <span>Pts</span>
-                  </div>
                 </div>
 
                 <table className={`data-table compact-table${tableMode === "Full" ? " table-mode-full" : ""}`}>
+                  <thead>
+                    <tr>
+                      <th className="team-cell team-head" />
+                      <th>Pl</th>
+                      {tableMode === "Full" ? (
+                        <>
+                          <th>W</th>
+                          <th>D</th>
+                          <th>L</th>
+                          <th>+/-</th>
+                        </>
+                      ) : null}
+                      <th>GD</th>
+                      <th>Pts</th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {group.rows.map((row, index) => {
                       const stats = row.stats[scopeKey];
@@ -92,8 +94,7 @@ export function TableTab({ companyPicks, scopeMode, standings, tableMode }: Tabl
                               <td>{stats.wins}</td>
                               <td>{stats.draws}</td>
                               <td>{stats.losses}</td>
-                              <td>{stats.goalsFor}</td>
-                              <td>{stats.goalsAgainst}</td>
+                              <td>{stats.goalsFor}-{stats.goalsAgainst}</td>
                             </>
                           ) : null}
                           <td>{stats.goalDiff > 0 ? `+${stats.goalDiff}` : stats.goalDiff}</td>
