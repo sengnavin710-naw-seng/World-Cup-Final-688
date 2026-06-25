@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 
 type DisplayNameDialogProps = {
@@ -116,7 +117,18 @@ export function DisplayNameDialog({
         role="dialog"
         onKeyDown={handleKeyDown}
       >
-        <h3 id={`${inputId}-title`}>Your Display Name</h3>
+        <div className="dialog-header">
+          <h3 id={`${inputId}-title`}>Your Display Name</h3>
+          <button
+            aria-label="Close"
+            className="dialog-close-btn"
+            disabled={submitting}
+            type="button"
+            onClick={onCancel}
+          >
+            <X size={18} strokeWidth={2.5} />
+          </button>
+        </div>
         <form
           aria-label="Display name form"
           onSubmit={(event) => {

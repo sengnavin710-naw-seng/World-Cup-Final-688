@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Bell, MoreHorizontal } from "lucide-react";
+import { ArrowLeftRight, Bell, Pencil, RotateCcw, Settings } from "lucide-react";
 import {
   Suspense,
   useCallback,
@@ -16,12 +16,11 @@ import {
   type HomeTab,
 } from "../../lib/tournamentQueries";
 import type { ParticipantSession } from "../../lib/types";
-import {
-  FixtureFilters,
-  type FixtureFilter,
-} from "../home/FixtureFilters";
 import { BrandHeader } from "../ui/BrandHeader";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { DisplayNameDialog } from "../selection/DisplayNameDialog";
+import { updateDisplayName } from "../../lib/api";
+import { tournamentQueries } from "../../lib/tournamentQueries";
 import {
   TabCarousel,
   type TabCarouselMotionState,
@@ -58,8 +57,6 @@ export function AppShell({
   const activeTab = tabs[activeIndex] ?? tabs[0];
   const queryClient = useQueryClient();
   const queries = useHomeTabQueries(activeIndex);
-  const [fixtureFilter, setFixtureFilter] = useState<FixtureFilter>("Date");
-  const [fixtureGroupOverride, setFixtureGroupOverride] = useState("");
   const [tableMode, setTableMode] = useState<(typeof tableModes)[number]>("Short");
   const [scopeMode, setScopeMode] =
     useState<(typeof scopeModes)[number]>("Overall");
@@ -69,6 +66,9 @@ export function AppShell({
   const [showMenu, setShowMenu] = useState(false);
   const [showChangeConfirm, setShowChangeConfirm] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showChangeName, setShowChangeName] = useState(false);
+  const [changeNameError, setChangeNameError] = useState("");
+  const [changingName, setChangingName] = useState(false);
   const [resetError, setResetError] = useState("");
   const [resetting, setResetting] = useState(false);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -88,19 +88,6 @@ export function AppShell({
       null,
     [participant?.teamCode, queries.teams.data],
   );
-  const participantFixtureGroup = useMemo(
-    () =>
-      queries.fixtures.data?.find(
-        (fixture) =>
-          fixture.homeTeam === participant?.teamCode ||
-          fixture.awayTeam === participant?.teamCode,
-      )?.group ??
-      queries.fixtures.data?.[0]?.group ??
-      "A",
-    [participant?.teamCode, queries.fixtures.data],
-  );
-  const selectedFixtureGroup = fixtureGroupOverride || participantFixtureGroup;
-
   const prefetchTab = useCallback(
     (tab: HomeTab) => {
       void Promise.all([
@@ -308,12 +295,9 @@ export function AppShell({
             />
           ) : null}
           <LazyFixturesTab
-            activeFilter={fixtureFilter}
             companyPicks={queries.table.data?.companyPicks ?? []}
             fixtures={queries.fixtures.data}
             participantTeamCode={participant?.teamCode ?? ""}
-            selectedGroup={selectedFixtureGroup}
-            showFilters={false}
           />
         </>
       );
@@ -371,19 +355,6 @@ export function AppShell({
   };
 
   const renderTabToolbar = (tab: HomeTab) => {
-    if (tab === "Fixtures") {
-      return (
-        <section className="fixture-shell-toolbar">
-          <FixtureFilters
-            activeFilter={fixtureFilter}
-            onFilterChange={setFixtureFilter}
-            onGroupChange={setFixtureGroupOverride}
-            selectedGroup={selectedFixtureGroup}
-          />
-        </section>
-      );
-    }
-
     if (tab === "Table") {
       return (
         <section className="table-shell-toolbar">
@@ -467,36 +438,56 @@ export function AppShell({
                   setShowMenu((current) => !current);
                 }}
               >
-                <MoreHorizontal size={18} />
+                <Settings size={18} />
               </button>
               {showMenu ? (
-                <div className="menu-panel">
-                  <div className="menu-panel-label">Selected Team</div>
-                  <div className="menu-panel-value">
-                    {selectedTeam?.flag ? (
-                      <span aria-hidden="true">{selectedTeam.flag}</span>
-                    ) : null}
-                    <span>{selectedTeam?.name ?? "Unknown Team"}</span>
+                <>
+                  <div
+                    className="menu-backdrop"
+                    aria-hidden="true"
+                    onClick={() => setShowMenu(false)}
+                  />
+                  <div className="menu-panel">
+                    <div className="menu-panel-label">Selected Team</div>
+                    <div className="menu-panel-value">
+                      {selectedTeam?.flag ? (
+                        <span aria-hidden="true">{selectedTeam.flag}</span>
+                      ) : null}
+                      <span>{selectedTeam?.name ?? "Unknown Team"}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowMenu(false);
+                        setShowChangeConfirm(true);
+                      }}
+                    >
+                      <ArrowLeftRight size={15} strokeWidth={2.2} />
+                      Change Team
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowMenu(false);
+                        setChangeNameError("");
+                        setShowChangeName(true);
+                      }}
+                    >
+                      <Pencil size={15} strokeWidth={2.2} />
+                      Change Name
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowMenu(false);
+                        setShowResetConfirm(true);
+                      }}
+                    >
+                      <RotateCcw size={15} strokeWidth={2.2} />
+                      Reset this team
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowMenu(false);
-                      setShowChangeConfirm(true);
-                    }}
-                  >
-                    Change Team
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowMenu(false);
-                      setShowResetConfirm(true);
-                    }}
-                  >
-                    Reset this device
-                  </button>
-                </div>
+                </>
               ) : null}
             </div>
           </header>
@@ -547,6 +538,33 @@ export function AppShell({
         />
       </div>
 
+      <DisplayNameDialog
+        initialValue={participant?.displayName ?? ""}
+        open={showChangeName}
+        submitError={changeNameError}
+        submitting={changingName}
+        onCancel={() => setShowChangeName(false)}
+        onConfirm={(displayName) => {
+          if (!participant?.deviceId) {
+            setChangeNameError("Please select a team first before changing your name.");
+            return;
+          }
+          setChangingName(true);
+          setChangeNameError("");
+          void updateDisplayName(participant.deviceId, displayName)
+            .then(() => {
+              void queryClient.invalidateQueries({ queryKey: tournamentQueries.table.queryKey });
+              void queryClient.invalidateQueries({ queryKey: tournamentQueries.teams.queryKey });
+              setShowChangeName(false);
+            })
+            .catch(() => {
+              setChangeNameError("Unable to update name. Please try again.");
+            })
+            .finally(() => {
+              setChangingName(false);
+            });
+        }}
+      />
       <ConfirmDialog
         confirmLabel="Change Team"
         description="Do you want to return to the selection screen and pick another team?"
