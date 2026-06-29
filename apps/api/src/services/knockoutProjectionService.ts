@@ -339,6 +339,20 @@ export function projectKnockoutRounds(
     r32FixtureByTeam.set(fixture.awayTeam, fixture);
   }
 
+  // Build lookup of actual kickoff datetimes by date from ALL Football API fixtures
+  // Used to find correct kickoff time for R16+ matches (teams still TBD in API)
+  const apiKickoffsByDate = new Map<string, string[]>();
+  for (const fixture of fixtures) {
+    if (!fixture.kickoff?.includes("T")) continue;
+    const date = fixture.kickoff.substring(0, 10);
+    const list = apiKickoffsByDate.get(date) ?? [];
+    list.push(fixture.kickoff);
+    apiKickoffsByDate.set(date, list);
+  }
+  for (const [, list] of apiKickoffsByDate) {
+    list.sort(); // sort chronologically within each date
+  }
+
   // Track winner of each match number so "Winner Match N" placeholders can be resolved
   const winnerByMatchNumber = new Map<number, string>();
 
@@ -454,6 +468,24 @@ export function projectKnockoutRounds(
     }
 
     // Round of 16 and beyond: resolve "Winner Match N" → actual team code, then live lookup
+    // Pre-assign actual kickoff datetimes from Football API by sorting matches per date by bracketSlot
+    const kickoffByMatchId = new Map<string, string>();
+    const dateSlotIndex = new Map<string, number>();
+    const matchesSortedByDate = [...round.matches].sort((a, b) => {
+      const dateDiff = (a.kickoff ?? "").localeCompare(b.kickoff ?? "");
+      return dateDiff !== 0 ? dateDiff : (a.bracketSlot ?? 0) - (b.bracketSlot ?? 0);
+    });
+    for (const m of matchesSortedByDate) {
+      if (m.kickoff && !m.kickoff.includes("T")) {
+        const kickoffs = apiKickoffsByDate.get(m.kickoff);
+        if (kickoffs && kickoffs.length > 0) {
+          const idx = dateSlotIndex.get(m.kickoff) ?? 0;
+          dateSlotIndex.set(m.kickoff, idx + 1);
+          kickoffByMatchId.set(m.id, kickoffs[idx] ?? m.kickoff);
+        }
+      }
+    }
+
     return {
       ...round,
       matches: round.matches.map((match) => {
@@ -478,7 +510,7 @@ export function projectKnockoutRounds(
           homeScore: live ? (scoreSwap ? (live.awayScore ?? match.homeScore) as number : (live.homeScore ?? match.homeScore) as number) : match.homeScore,
           awayScore: live ? (scoreSwap ? (live.homeScore ?? match.awayScore) as number : (live.awayScore ?? match.awayScore) as number) : match.awayScore,
           statusShort: live?.statusShort ?? match.statusShort,
-          kickoff: live?.kickoff ?? match.kickoff,
+          kickoff: live?.kickoff ?? kickoffByMatchId.get(match.id) ?? match.kickoff,
         };
       }),
     };

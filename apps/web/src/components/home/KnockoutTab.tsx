@@ -262,22 +262,33 @@ function getMobileSourcePairIndexes(
 
 function formatKnockoutKickoff(kickoff: string) {
   const normalized = kickoff.trim();
-  const match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2}))?/);
 
-  if (!match) {
-    return {
-      dateTime: undefined,
-      label: normalized,
-    };
+  // Full ISO datetime (e.g. "2026-06-29T20:30:00+00:00") → convert to local timezone
+  if (normalized.includes("T")) {
+    const date = new Date(normalized);
+    if (!Number.isNaN(date.getTime())) {
+      const time = new Intl.DateTimeFormat("en-GB", {
+        hour: "2-digit",
+        hour12: false,
+        minute: "2-digit",
+      }).format(date);
+      return {
+        dateTime: normalized,
+        label: `${weekdayLabels[date.getDay()]}, ${monthLabels[date.getMonth()]} ${date.getDate()}\n${time}`,
+      };
+    }
   }
 
-  const [, year, month, day, hour, minute] = match;
+  // Date-only fallback (e.g. "2026-06-29") — no timezone conversion needed
+  const match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) {
+    return { dateTime: undefined, label: normalized };
+  }
+  const [, year, month, day] = match;
   const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
-  const time = hour && minute ? `${hour}:${minute}` : defaultKnockoutKickoffTime;
-
   return {
-    dateTime: `${year}-${month}-${day}T${time}`,
-    label: `${weekdayLabels[date.getUTCDay()]}, ${monthLabels[date.getUTCMonth()]} ${Number(day)}\n${time}`,
+    dateTime: `${year}-${month}-${day}T${defaultKnockoutKickoffTime}`,
+    label: `${weekdayLabels[date.getUTCDay()]}, ${monthLabels[date.getUTCMonth()]} ${Number(day)}\n${defaultKnockoutKickoffTime}`,
   };
 }
 
