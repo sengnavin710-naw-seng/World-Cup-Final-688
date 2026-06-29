@@ -81,17 +81,24 @@ function collectThirdPlaceSlots(round: KnockoutRound | undefined): ThirdPlaceSlo
     };
 
     return (["home", "away"] as const).flatMap((side) => {
-      const label =
-        side === "home"
-          ? labels.home
-          : labels.away;
-      const opponentLabel = side === "home" ? labels.away : labels.home;
+      const label = labels[side];
       const candidates = parseThirdPlaceCandidates(label);
-      const winnerGroup = parseGroupWinner(opponentLabel);
 
-      return candidates.length && winnerGroup
-        ? [{ candidates: new Set(candidates), key: `${match.id}:${side}`, winnerGroup }]
-        : [];
+      if (!candidates.length) {
+        return [];
+      }
+
+      const otherSide = side === "home" ? "away" : "home";
+      const otherLabel = labels[otherSide];
+      const winnerGroup = parseGroupWinner(otherLabel);
+
+      return [
+        {
+          candidates: new Set(candidates),
+          key: `${match.id}:${side}`,
+          winnerGroup,
+        },
+      ];
     });
   });
 }
@@ -99,34 +106,17 @@ function collectThirdPlaceSlots(round: KnockoutRound | undefined): ThirdPlaceSlo
 function assignThirdPlacedTeams(
   slots: ThirdPlaceSlot[],
   teams: RankedThirdPlacedTeam[],
-) {
-  if (slots.length !== 8 || teams.length !== 8) {
+): Map<string, string> {
+  if (!slots.length || !teams.length) {
     return new Map<string, string>();
   }
 
-  const officialAllocation = getThirdPlaceAllocation(teams.map((team) => team.group));
+  const thirdPlaceAllocation = getThirdPlaceAllocation(
+    teams.map((team) => team.group),
+  );
 
-  if (officialAllocation) {
-    const teamsByGroup = new Map(teams.map((team) => [team.group, team.teamCode]));
-    const assignments = new Map<string, string>();
-
-    slots.forEach((slot) => {
-      const assignedGroup = officialAllocation[slot.winnerGroup as keyof typeof officialAllocation];
-
-      if (!assignedGroup) {
-        return;
-      }
-
-      const teamCode = teamsByGroup.get(assignedGroup);
-
-      if (teamCode && slot.candidates.has(assignedGroup)) {
-        assignments.set(slot.key, teamCode);
-      }
-    });
-
-    if (assignments.size === slots.length) {
-      return assignments;
-    }
+  if (!thirdPlaceAllocation) {
+    return new Map<string, string>();
   }
 
   const assignments = new Map<string, string>();
@@ -232,38 +222,117 @@ export function projectKnockoutRounds(
     rankThirdPlacedTeams(standings),
   );
 
+  // Build team-pair lookup: sorted "CODE1:CODE2" -> Fixture
+  const fixtureByTeamPair = new Map<string, Fixture>();
+  for (const fixture of fixtures) {
+    if (fixture.homeTeam && fixture.awayTeam) {
+      const key = [fixture.homeTeam, fixture.awayTeam].sort().join(":");
+      fixtureByTeamPair.set(key, fixture);
+    }
+  }
+
+  // Track winner of each match number so "Winner Match N" placeholders can be resolved
+  const winnerByMatchNumber = new Map<number, string>();
+
+  function isTeamCode(s: string): boolean {
+    return s.length > 0 && !/^(Winner|Runner-up|Best third|Group|TBD)/i.test(s);
+  }
+
+  function liveForPair(teamA: string, teamB: string): Fixture | undefined {
+    if (!isTeamCode(teamA) || !isTeamCode(teamB)) return undefined;
+    return fixtureByTeamPair.get([teamA, teamB].sort().join(":"));
+  }
+
+  function resolveWinnerSlot(placeholder: string): string {
+    const m = placeholder.match(/^Winner Match (\d+)$/i);
+    if (m) {
+      const num = parseInt(m[1], 10);
+      return winnerByMatchNumber.get(num) ?? placeholder;
+    }
+    return placeholder;
+  }
+
+  function recordWinner(
+    matchNumber: number,
+    resolvedHome: string,
+    resolvedAway: string,
+    live: Fixture | undefined,
+  ) {
+    if (!live?.statusShort || !terminalFixtureStatuses.has(live.statusShort)) return;
+    const h = live.homeScore ?? 0;
+    const a = live.awayScore ?? 0;
+    if (h === a) return; // draw should not occur in knockout (PEN = draw in regular time only)
+    if (h > a) {
+      // home side of fixture won — find which resolved code that is
+      const winner = live.homeTeam === resolvedHome || live.homeTeam === resolvedAway
+        ? live.homeTeam
+        : resolvedHome;
+      winnerByMatchNumber.set(matchNumber, winner);
+    } else {
+      const winner = live.awayTeam === resolvedAway || live.awayTeam === resolvedHome
+        ? live.awayTeam
+        : resolvedAway;
+      winnerByMatchNumber.set(matchNumber, winner);
+    }
+  }
+
   return baseRounds.map((round, roundIndex) => {
-    if (roundIndex !== 0) {
+    if (roundIndex === 0) {
+      // Round of 32: resolve teams from group standings, then look up live fixture by team pair
       return {
         ...round,
-        matches: round.matches.map((match) => ({ ...match })),
+        matches: round.matches.map((match) => {
+          const homePlaceholder = match.homeTeamPlaceholder ?? match.homeTeam;
+          const awayPlaceholder = match.awayTeamPlaceholder ?? match.awayTeam;
+          const homeDirect = resolveDirectGroupSlot(homePlaceholder, standingsByGroup, completedGroups);
+          const awayDirect = resolveDirectGroupSlot(awayPlaceholder, standingsByGroup, completedGroups);
+          const homeThird = thirdPlaceAssignments.get(`${match.id}:home`);
+          const awayThird = thirdPlaceAssignments.get(`${match.id}:away`);
+
+          const resolvedHome = homeDirect?.teamCode ?? homeThird ?? match.homeTeam;
+          const resolvedAway = awayDirect?.teamCode ?? awayThird ?? match.awayTeam;
+
+          const live = liveForPair(resolvedHome, resolvedAway);
+          recordWinner(match.matchNumber, resolvedHome, resolvedAway, live);
+
+          return {
+            ...match,
+            homeTeam: resolvedHome,
+            homeTeamConfirmed: homeDirect?.confirmed ?? (homeThird ? allGroupsComplete : false),
+            awayTeam: resolvedAway,
+            awayTeamConfirmed: awayDirect?.confirmed ?? (awayThird ? allGroupsComplete : false),
+            homeScore: live?.homeScore ?? match.homeScore,
+            awayScore: live?.awayScore ?? match.awayScore,
+            statusShort: live?.statusShort ?? match.statusShort,
+            kickoff: live?.kickoff ?? match.kickoff,
+          };
+        }),
       };
     }
 
+    // Round of 16 and beyond: resolve "Winner Match N" → actual team code, then live lookup
     return {
       ...round,
       matches: round.matches.map((match) => {
         const homePlaceholder = match.homeTeamPlaceholder ?? match.homeTeam;
         const awayPlaceholder = match.awayTeamPlaceholder ?? match.awayTeam;
-        const homeDirect = resolveDirectGroupSlot(
-          homePlaceholder,
-          standingsByGroup,
-          completedGroups,
-        );
-        const awayDirect = resolveDirectGroupSlot(
-          awayPlaceholder,
-          standingsByGroup,
-          completedGroups,
-        );
-        const homeThird = thirdPlaceAssignments.get(`${match.id}:home`);
-        const awayThird = thirdPlaceAssignments.get(`${match.id}:away`);
+
+        const resolvedHome = resolveWinnerSlot(homePlaceholder);
+        const resolvedAway = resolveWinnerSlot(awayPlaceholder);
+
+        const live = liveForPair(resolvedHome, resolvedAway);
+        recordWinner(match.matchNumber, resolvedHome, resolvedAway, live);
 
         return {
           ...match,
-          homeTeam: homeDirect?.teamCode ?? homeThird ?? match.homeTeam,
-          homeTeamConfirmed: homeDirect?.confirmed ?? (homeThird ? allGroupsComplete : false),
-          awayTeam: awayDirect?.teamCode ?? awayThird ?? match.awayTeam,
-          awayTeamConfirmed: awayDirect?.confirmed ?? (awayThird ? allGroupsComplete : false),
+          homeTeam: resolvedHome,
+          homeTeamConfirmed: isTeamCode(resolvedHome),
+          awayTeam: resolvedAway,
+          awayTeamConfirmed: isTeamCode(resolvedAway),
+          homeScore: live?.homeScore ?? match.homeScore,
+          awayScore: live?.awayScore ?? match.awayScore,
+          statusShort: live?.statusShort ?? match.statusShort,
+          kickoff: live?.kickoff ?? match.kickoff,
         };
       }),
     };

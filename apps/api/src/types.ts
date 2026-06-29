@@ -29,6 +29,7 @@ export type KnockoutRound = {
     awayTeamPlaceholder?: string;
     homeScore: number;
     awayScore: number;
+    statusShort?: string;
     kickoff: string;
     side?: "left" | "right" | "center";
     bracketColumn?: number;

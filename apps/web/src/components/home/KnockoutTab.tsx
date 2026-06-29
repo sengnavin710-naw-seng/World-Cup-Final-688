@@ -311,7 +311,7 @@ function resolveKnockoutTeam(value: string, teams: Team[]): ResolvedKnockoutTeam
   };
 }
 
-function KnockoutCrest({ teams, value }: { teams: Team[]; value: string }) {
+function KnockoutCrest({ teams, value, faded }: { teams: Team[]; value: string; faded?: boolean }) {
   const [hasImageError, setHasImageError] = useState(false);
   const { team } = resolveKnockoutTeam(value, teams);
 
@@ -320,7 +320,7 @@ function KnockoutCrest({ teams, value }: { teams: Team[]; value: string }) {
   }
 
   return (
-    <span className="knockout-crest" aria-hidden="true">
+    <span className={`knockout-crest${faded ? " knockout-crest-faded" : ""}`} aria-hidden="true">
       {hasImageError ? (
         <span className="knockout-crest-fallback">{team.flag}</span>
       ) : (
@@ -335,12 +335,12 @@ function KnockoutCrest({ teams, value }: { teams: Team[]; value: string }) {
   );
 }
 
-function KnockoutTeamName({ mobile, teams, value }: { mobile?: boolean; teams: Team[]; value: string }) {
+function KnockoutTeamName({ mobile, teams, value, loser }: { mobile?: boolean; teams: Team[]; value: string; loser?: boolean }) {
   const resolved = resolveKnockoutTeam(value, teams);
   const displayLabel = mobile ? resolved.fullLabel : resolved.label;
 
   return (
-    <span className="knockout-team-name">
+    <span className={`knockout-team-name${loser ? " knockout-team-loser" : ""}`}>
       <span className="knockout-team-label">{displayLabel}</span>
       {resolved.ownerName ? (
         <small className="knockout-owner-name">({resolved.ownerName})</small>
@@ -768,9 +768,24 @@ function getConnectorPaths() {
   return paths;
 }
 
+const TERMINAL_STATUSES = new Set(["FT", "AET", "PEN", "AWD", "WO"]);
+
+function isFinished(statusShort?: string) {
+  return TERMINAL_STATUSES.has(statusShort ?? "");
+}
+
+function getLoser(match: KnockoutMatch): "home" | "away" | null {
+  if (!isFinished(match.statusShort)) return null;
+  if (match.homeScore > match.awayScore) return "away";
+  if (match.awayScore > match.homeScore) return "home";
+  return null; // draw (shouldn't happen in knockout, but safe)
+}
+
 function MatchCard({ match, teams }: { match: BracketMatch; teams: Team[] }) {
   const position = getMatchPosition(match);
   const kickoff = formatKnockoutKickoff(match.kickoff);
+  const finished = isFinished(match.statusShort);
+  const loser = getLoser(match);
   const style = {
     left: position.x,
     top: position.y,
@@ -778,20 +793,28 @@ function MatchCard({ match, teams }: { match: BracketMatch; teams: Team[] }) {
 
   return (
     <article
-      aria-label={`${match.round}: ${match.homeTeam} vs ${match.awayTeam}, ${kickoff.label.replace("\n", " ")}`}
-      className={`knockout-card${match.badge ? " knockout-card-featured" : ""}`}
+      aria-label={`${match.round}: ${match.homeTeam} vs ${match.awayTeam}, ${finished ? `${match.homeScore}-${match.awayScore}` : kickoff.label.replace("\n", " ")}`}
+      className={`knockout-card${match.badge ? " knockout-card-featured" : ""}${finished ? " knockout-card-finished" : ""}`}
       data-badge={match.badge}
       style={style}
     >
       <div className="knockout-card-crests" aria-hidden="true">
-        <KnockoutCrest teams={teams} value={match.homeTeam} />
-        <KnockoutCrest teams={teams} value={match.awayTeam} />
+        <KnockoutCrest teams={teams} value={match.homeTeam} faded={loser === "home"} />
+        <KnockoutCrest teams={teams} value={match.awayTeam} faded={loser === "away"} />
       </div>
       <div className="knockout-card-teams">
-        <KnockoutTeamName teams={teams} value={match.homeTeam} />
-        <KnockoutTeamName teams={teams} value={match.awayTeam} />
+        <KnockoutTeamName teams={teams} value={match.homeTeam} loser={loser === "home"} />
+        <KnockoutTeamName teams={teams} value={match.awayTeam} loser={loser === "away"} />
       </div>
-      <time className="knockout-card-date" dateTime={kickoff.dateTime}>{kickoff.label}</time>
+      {finished ? (
+        <div className="knockout-card-score">
+          <span>{match.homeScore}</span>
+          <span className="knockout-card-score-sep">–</span>
+          <span>{match.awayScore}</span>
+        </div>
+      ) : (
+        <time className="knockout-card-date" dateTime={kickoff.dateTime}>{kickoff.label}</time>
+      )}
       {match.badge ? <span className="knockout-card-badge">{match.badge}</span> : null}
     </article>
   );
@@ -799,6 +822,8 @@ function MatchCard({ match, teams }: { match: BracketMatch; teams: Team[] }) {
 
 function MobileBracketMatchCard({ match, teams }: { match: MobilePositionedMatch; teams: Team[] }) {
   const kickoff = formatKnockoutKickoff(match.kickoff);
+  const finished = isFinished(match.statusShort);
+  const loser = getLoser(match);
   const style = {
     "--knockout-mobile-card-height": `${match.height}px`,
     left: match.x,
@@ -809,8 +834,8 @@ function MobileBracketMatchCard({ match, teams }: { match: MobilePositionedMatch
 
   return (
     <article
-      aria-label={`${match.round}: ${match.homeTeam} vs ${match.awayTeam}, ${kickoff.label.replace("\n", " ")}`}
-      className={`knockout-mobile-bracket-card${match.badge === "FINAL" ? " knockout-mobile-bracket-final" : ""}`}
+      aria-label={`${match.round}: ${match.homeTeam} vs ${match.awayTeam}, ${finished ? `${match.homeScore}-${match.awayScore}` : kickoff.label.replace("\n", " ")}`}
+      className={`knockout-mobile-bracket-card${match.badge === "FINAL" ? " knockout-mobile-bracket-final" : ""}${finished ? " knockout-card-finished" : ""}`}
       data-badge={match.badge}
       data-round-index={match.roundIndex}
       style={style}
@@ -819,20 +844,28 @@ function MobileBracketMatchCard({ match, teams }: { match: MobilePositionedMatch
         <>
           <div className="knockout-mobile-final-stage">
             <div className="knockout-mobile-final-contender">
-              <KnockoutCrest teams={teams} value={match.homeTeam} />
-              <KnockoutTeamName mobile teams={teams} value={match.homeTeam} />
+              <KnockoutCrest teams={teams} value={match.homeTeam} faded={loser === "home"} />
+              <KnockoutTeamName mobile teams={teams} value={match.homeTeam} loser={loser === "home"} />
             </div>
             <div className="knockout-mobile-final-trophy" aria-hidden="true">
               <Trophy size={64} strokeWidth={1.35} />
             </div>
             <div className="knockout-mobile-final-contender">
-              <KnockoutCrest teams={teams} value={match.awayTeam} />
-              <KnockoutTeamName mobile teams={teams} value={match.awayTeam} />
+              <KnockoutCrest teams={teams} value={match.awayTeam} faded={loser === "away"} />
+              <KnockoutTeamName mobile teams={teams} value={match.awayTeam} loser={loser === "away"} />
             </div>
           </div>
           <div className="knockout-mobile-final-meta">
             <strong>{match.venue}</strong>
-            <time dateTime={kickoff.dateTime}>{kickoff.label.replace("\n", ", ")}</time>
+            {finished ? (
+              <div className="knockout-card-score knockout-card-score-final">
+                <span>{match.homeScore}</span>
+                <span className="knockout-card-score-sep">–</span>
+                <span>{match.awayScore}</span>
+              </div>
+            ) : (
+              <time dateTime={kickoff.dateTime}>{kickoff.label.replace("\n", ", ")}</time>
+            )}
           </div>
         </>
       ) : (
@@ -847,15 +880,23 @@ function MobileBracketMatchCard({ match, teams }: { match: MobilePositionedMatch
           <div className="knockout-mobile-card-body">
             <div className="knockout-mobile-card-teams">
               <div className="knockout-mobile-card-team">
-                <KnockoutCrest teams={teams} value={match.homeTeam} />
-                <KnockoutTeamName mobile teams={teams} value={match.homeTeam} />
+                <KnockoutCrest teams={teams} value={match.homeTeam} faded={loser === "home"} />
+                <KnockoutTeamName mobile teams={teams} value={match.homeTeam} loser={loser === "home"} />
               </div>
               <div className="knockout-mobile-card-team">
-                <KnockoutCrest teams={teams} value={match.awayTeam} />
-                <KnockoutTeamName mobile teams={teams} value={match.awayTeam} />
+                <KnockoutCrest teams={teams} value={match.awayTeam} faded={loser === "away"} />
+                <KnockoutTeamName mobile teams={teams} value={match.awayTeam} loser={loser === "away"} />
               </div>
             </div>
-            <time dateTime={kickoff.dateTime}>{kickoff.label}</time>
+            {finished ? (
+              <div className="knockout-card-score">
+                <span>{match.homeScore}</span>
+                <span className="knockout-card-score-sep">–</span>
+                <span>{match.awayScore}</span>
+              </div>
+            ) : (
+              <time dateTime={kickoff.dateTime}>{kickoff.label}</time>
+            )}
           </div>
         </>
       )}
@@ -872,9 +913,6 @@ export function KnockoutTab({
   rounds: KnockoutRound[];
   teams: Team[];
 }) {
-  const [statusView, setStatusView] = useState<"as-it-stands" | "confirmed">(
-    "as-it-stands",
-  );
   const [activeMobileRound, setActiveMobileRound] = useState("");
   const [mobileScrollLeft, setMobileScrollLeft] = useState(0);
   const [mobileViewportWidth, setMobileViewportWidth] = useState(0);
@@ -887,33 +925,15 @@ export function KnockoutTab({
   const mobileSnapAnimationFrameRef = useRef<number | null>(null);
   const mobileScrollFrameRef = useRef<number | null>(null);
   const latestMobileScrollLeftRef = useRef(0);
-  const displayRounds = useMemo(
-    () =>
-      statusView === "as-it-stands"
-        ? rounds
-        : rounds.map((round) => ({
-            ...round,
-            matches: round.matches.map((match) => ({
-              ...match,
-              homeTeam: match.homeTeamConfirmed
-                ? match.homeTeam
-                : match.homeTeamPlaceholder || "TBD",
-              awayTeam: match.awayTeamConfirmed
-                ? match.awayTeam
-                : match.awayTeamPlaceholder || "TBD",
-            })),
-          })),
-    [rounds, statusView],
-  );
-  const matches = useMemo(() => getBracketMatches(displayRounds), [displayRounds]);
+  const matches = useMemo(() => getBracketMatches(rounds), [rounds]);
   const connectorPaths = useMemo(() => getConnectorPaths(), []);
   const expandedFinalWidth = Math.max(
     mobileBoard.cardWidth,
     mobileViewportWidth - mobileBoard.left * 2,
   );
   const mobileLayout = useMemo(
-    () => getMobileBracketLayout(displayRounds, mobileScrollLeft, expandedFinalWidth),
-    [displayRounds, expandedFinalWidth, mobileScrollLeft],
+    () => getMobileBracketLayout(rounds, mobileScrollLeft, expandedFinalWidth),
+    [rounds, expandedFinalWidth, mobileScrollLeft],
   );
   const mobileRoundMotion = useMemo(
     () =>
@@ -1327,29 +1347,6 @@ export function KnockoutTab({
       </div>
 
       <section className="knockout-mobile" aria-label="World Cup knockout rounds">
-        <div
-          className="knockout-status-filter"
-          role="group"
-          aria-label="Knockout status"
-        >
-          <button
-            aria-pressed={statusView === "as-it-stands"}
-            className="knockout-status-chip"
-            type="button"
-            onClick={() => setStatusView("as-it-stands")}
-          >
-            As it stands
-          </button>
-          <button
-            aria-pressed={statusView === "confirmed"}
-            className="knockout-status-chip"
-            type="button"
-            onClick={() => setStatusView("confirmed")}
-          >
-            Confirmed
-          </button>
-        </div>
-
         <div className="knockout-round-strip" role="tablist" aria-label="Knockout rounds">
           {rounds.map((round, roundIndex) => {
             const selectionProgress = getRoundSelectionProgress(

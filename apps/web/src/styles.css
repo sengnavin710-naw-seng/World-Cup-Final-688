@@ -1404,6 +1404,46 @@ button {
   white-space: pre-line;
 }
 
+/* Score display for finished matches */
+.knockout-card-score {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.knockout-card-score-sep {
+  opacity: 0.6;
+  font-weight: 400;
+}
+
+.knockout-card-score-final {
+  font-size: 1.1rem;
+  gap: 6px;
+}
+
+/* Loser team — strikethrough + dim */
+.knockout-team-loser .knockout-team-label {
+  text-decoration: line-through;
+  opacity: 0.45;
+}
+
+/* Faded crest for loser */
+.knockout-crest-faded {
+  opacity: 0.35;
+  filter: grayscale(60%);
+}
+
+/* Finished card subtle tint */
+.knockout-card-finished {
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .knockout-card-badge {
   position: absolute;
   left: 50%;
