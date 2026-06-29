@@ -228,6 +228,11 @@ export function projectKnockoutRounds(
     if (fixture.homeTeam && fixture.awayTeam) {
       const key = [fixture.homeTeam, fixture.awayTeam].sort().join(":");
       fixtureByTeamPair.set(key, fixture);
+      // DEBUG: log knockout-stage fixtures only
+      if (!worldCupGroups.includes(fixture.group) || fixture.statusShort === "FT") {
+        const isR32 = (fixture.homeScore !== null && fixture.awayScore !== null);
+        if (isR32) console.log(`[KO-DEBUG] pair=${key} status=${fixture.statusShort} score=${fixture.homeScore}-${fixture.awayScore}`);
+      }
     }
   }
 
