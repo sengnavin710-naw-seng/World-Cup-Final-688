@@ -325,6 +325,20 @@ export function projectKnockoutRounds(
     }
   }
 
+  // Build R32 cross-group fixture lookup: team code -> their actual R32 opponent fixture
+  // Cross-group = teams from different groups; R32 date range ends before July 4 (R16 starts July 4)
+  const r32FixtureByTeam = new Map<string, Fixture>();
+  for (const fixture of fixtures) {
+    if (!fixture.homeTeam || !fixture.awayTeam) continue;
+    const homeRec = teamByCode.get(fixture.homeTeam);
+    const awayRec = teamByCode.get(fixture.awayTeam);
+    if (!homeRec || !awayRec || homeRec.group === awayRec.group) continue;
+    const kickoffDate = fixture.kickoff.substring(0, 10);
+    if (kickoffDate >= "2026-07-04") continue; // skip R16+
+    r32FixtureByTeam.set(fixture.homeTeam, fixture);
+    r32FixtureByTeam.set(fixture.awayTeam, fixture);
+  }
+
   // Track winner of each match number so "Winner Match N" placeholders can be resolved
   const winnerByMatchNumber = new Map<number, string>();
 
@@ -372,20 +386,55 @@ export function projectKnockoutRounds(
 
   return baseRounds.map((round, roundIndex) => {
     if (roundIndex === 0) {
-      // Round of 32: resolve teams from group standings, then look up live fixture by team pair
+      // Round of 32: resolve home team from standings, then use actual Football API fixture
+      // for the opponent (bypasses unreliable "Best third" ranking computation)
       return {
         ...round,
         matches: round.matches.map((match) => {
           const homePlaceholder = match.homeTeamPlaceholder ?? match.homeTeam;
           const awayPlaceholder = match.awayTeamPlaceholder ?? match.awayTeam;
           const homeDirect = resolveDirectGroupSlot(homePlaceholder, standingsByGroup, completedGroups);
+          const resolvedHomeCode = homeDirect?.teamCode;
+
+          if (resolvedHomeCode && isTeamCode(resolvedHomeCode)) {
+            // Look up the actual R32 fixture for this home team directly from Football API data
+            const crossFx = r32FixtureByTeam.get(resolvedHomeCode);
+            if (crossFx && crossFx.homeTeam && crossFx.awayTeam) {
+              const isHomeInFx = crossFx.homeTeam === resolvedHomeCode;
+              const resolvedAwayCode = isHomeInFx ? crossFx.awayTeam : crossFx.homeTeam;
+              // Normalize scores: homeScore = resolvedHomeCode's goals
+              const normHomeScore = isHomeInFx ? crossFx.homeScore : crossFx.awayScore;
+              const normAwayScore = isHomeInFx ? crossFx.awayScore : crossFx.homeScore;
+
+              // Track winner for R16 resolution
+              if (crossFx.statusShort && terminalFixtureStatuses.has(crossFx.statusShort)) {
+                const h = normHomeScore ?? 0;
+                const a = normAwayScore ?? 0;
+                if (h !== a) {
+                  winnerByMatchNumber.set(match.matchNumber, h > a ? resolvedHomeCode : resolvedAwayCode);
+                }
+              }
+
+              return {
+                ...match,
+                homeTeam: resolvedHomeCode,
+                homeTeamConfirmed: homeDirect?.confirmed ?? false,
+                awayTeam: resolvedAwayCode,
+                awayTeamConfirmed: homeDirect?.confirmed ?? false,
+                homeScore: (normHomeScore ?? match.homeScore) as number,
+                awayScore: (normAwayScore ?? match.awayScore) as number,
+                statusShort: crossFx.statusShort ?? match.statusShort,
+                kickoff: crossFx.kickoff ?? match.kickoff,
+              };
+            }
+          }
+
+          // Fallback: standings + "Best third" assignment
           const awayDirect = resolveDirectGroupSlot(awayPlaceholder, standingsByGroup, completedGroups);
           const homeThird = thirdPlaceAssignments.get(`${match.id}:home`);
           const awayThird = thirdPlaceAssignments.get(`${match.id}:away`);
-
-          const resolvedHome = homeDirect?.teamCode ?? homeThird ?? match.homeTeam;
+          const resolvedHome = resolvedHomeCode ?? homeThird ?? match.homeTeam;
           const resolvedAway = awayDirect?.teamCode ?? awayThird ?? match.awayTeam;
-
           const live = liveForPair(resolvedHome, resolvedAway);
           recordWinner(match.matchNumber, resolvedHome, resolvedAway, live);
 
@@ -395,8 +444,8 @@ export function projectKnockoutRounds(
             homeTeamConfirmed: homeDirect?.confirmed ?? (homeThird ? allGroupsComplete : false),
             awayTeam: resolvedAway,
             awayTeamConfirmed: awayDirect?.confirmed ?? (awayThird ? allGroupsComplete : false),
-            homeScore: live?.homeScore ?? match.homeScore,
-            awayScore: live?.awayScore ?? match.awayScore,
+            homeScore: (live?.homeScore ?? match.homeScore) as number,
+            awayScore: (live?.awayScore ?? match.awayScore) as number,
             statusShort: live?.statusShort ?? match.statusShort,
             kickoff: live?.kickoff ?? match.kickoff,
           };
@@ -417,14 +466,17 @@ export function projectKnockoutRounds(
         const live = liveForPair(resolvedHome, resolvedAway);
         recordWinner(match.matchNumber, resolvedHome, resolvedAway, live);
 
+        // Fix score orientation: if fixture home/away differs from our resolved home/away, swap
+        const scoreSwap = live && isTeamCode(resolvedHome) && live.homeTeam !== resolvedHome;
+
         return {
           ...match,
           homeTeam: resolvedHome,
           homeTeamConfirmed: isTeamCode(resolvedHome),
           awayTeam: resolvedAway,
           awayTeamConfirmed: isTeamCode(resolvedAway),
-          homeScore: live?.homeScore ?? match.homeScore,
-          awayScore: live?.awayScore ?? match.awayScore,
+          homeScore: live ? (scoreSwap ? (live.awayScore ?? match.homeScore) as number : (live.homeScore ?? match.homeScore) as number) : match.homeScore,
+          awayScore: live ? (scoreSwap ? (live.homeScore ?? match.awayScore) as number : (live.awayScore ?? match.awayScore) as number) : match.awayScore,
           statusShort: live?.statusShort ?? match.statusShort,
           kickoff: live?.kickoff ?? match.kickoff,
         };
