@@ -1,8 +1,8 @@
 import { getSupabaseClient } from "../lib/supabase";
-import { fixtures, knockout, news, standings, teams } from "../data/tournamentData";
+import { fixtures, knockout, news, teams } from "../data/tournamentData";
 import type { ParticipantRecord, TeamView } from "../types";
 import { getApiFootballFixtures, getApiFootballStandings } from "./apiFootballService";
-import { projectKnockoutRounds } from "./knockoutProjectionService";
+import { computeStandingsFromFixtures, projectKnockoutRounds } from "./knockoutProjectionService";
 
 const memoryStore = new Map<string, ParticipantRecord>();
 
@@ -208,11 +208,13 @@ export async function getKnockoutRounds() {
     return knockout;
   }
 
-  if (!apiFixtures || !apiStandings) {
+  if (!apiFixtures) {
     return knockout;
   }
 
-  return projectKnockoutRounds(knockout, apiStandings, apiFixtures);
+  // If Football API standings unavailable, derive from fixture results
+  const effectiveStandings = apiStandings ?? computeStandingsFromFixtures(apiFixtures);
+  return projectKnockoutRounds(knockout, effectiveStandings, apiFixtures);
 }
 
 export async function getFixtures() {
@@ -220,7 +222,8 @@ export async function getFixtures() {
 }
 
 export async function getStandings() {
-  return (await getApiFootballStandings()) ?? standings;
+  const { standings: staticStandings } = await import("../data/tournamentData");
+  return (await getApiFootballStandings()) ?? staticStandings;
 }
 
 export function getNews() {

@@ -1,4 +1,5 @@
 import { getThirdPlaceAllocation } from "../data/thirdPlaceAllocation";
+import { teamByCode } from "../data/teams";
 import type { Fixture, GroupStanding, KnockoutRound } from "../types";
 
 const terminalFixtureStatuses = new Set(["FT", "AET", "PEN", "AWD", "WO"]);
@@ -182,6 +183,93 @@ function getCompletedGroups(fixtures: Fixture[]) {
   );
 }
 
+/**
+ * Derive group stage standings purely from fixture results.
+ * Used as fallback when the Football API standings endpoint is unavailable.
+ */
+export function computeStandingsFromFixtures(fixtures: Fixture[]): GroupStanding[] {
+  type TeamStat = {
+    draws: number;
+    goalsAgainst: number;
+    goalsFor: number;
+    losses: number;
+    played: number;
+    points: number;
+    teamCode: string;
+    wins: number;
+  };
+
+  const statsByGroup = new Map<string, Map<string, TeamStat>>();
+
+  for (const fixture of fixtures) {
+    if (!worldCupGroups.includes(fixture.group)) continue; // skip knockout rows
+    if (!terminalFixtureStatuses.has(fixture.statusShort ?? "")) continue;
+    if (fixture.homeScore == null || fixture.awayScore == null) continue;
+
+    const { group, homeTeam, awayTeam, homeScore, awayScore } = fixture;
+    if (!homeTeam || !awayTeam) continue;
+
+    if (!statsByGroup.has(group)) statsByGroup.set(group, new Map());
+    const gs = statsByGroup.get(group)!;
+
+    const blank = (code: string): TeamStat => ({
+      draws: 0, goalsAgainst: 0, goalsFor: 0, losses: 0,
+      played: 0, points: 0, teamCode: code, wins: 0,
+    });
+    if (!gs.has(homeTeam)) gs.set(homeTeam, blank(homeTeam));
+    if (!gs.has(awayTeam)) gs.set(awayTeam, blank(awayTeam));
+
+    const h = gs.get(homeTeam)!;
+    const a = gs.get(awayTeam)!;
+    h.played++; a.played++;
+    h.goalsFor += homeScore; h.goalsAgainst += awayScore;
+    a.goalsFor += awayScore; a.goalsAgainst += homeScore;
+
+    if (homeScore > awayScore) {
+      h.wins++; h.points += 3; a.losses++;
+    } else if (homeScore < awayScore) {
+      a.wins++; a.points += 3; h.losses++;
+    } else {
+      h.draws++; h.points++; a.draws++; a.points++;
+    }
+  }
+
+  const result: GroupStanding[] = [];
+  for (const group of worldCupGroups) {
+    const gs = statsByGroup.get(group);
+    if (!gs || gs.size === 0) continue;
+
+    const rows = [...gs.values()]
+      .sort((a, b) =>
+        b.points - a.points ||
+        (b.goalsFor - b.goalsAgainst) - (a.goalsFor - a.goalsAgainst) ||
+        b.goalsFor - a.goalsFor ||
+        b.wins - a.wins,
+      )
+      .map((stat) => {
+        const rec = teamByCode.get(stat.teamCode);
+        const gd = stat.goalsFor - stat.goalsAgainst;
+        return {
+          flag: rec?.flag ?? "",
+          stats: {
+            away: { draws: 0, goalDiff: 0, goalsAgainst: 0, goalsFor: 0, losses: 0, played: 0, points: 0, wins: 0 },
+            home: { draws: 0, goalDiff: 0, goalsAgainst: 0, goalsFor: 0, losses: 0, played: 0, points: 0, wins: 0 },
+            overall: {
+              draws: stat.draws, goalDiff: gd, goalsAgainst: stat.goalsAgainst,
+              goalsFor: stat.goalsFor, losses: stat.losses, played: stat.played,
+              points: stat.points, wins: stat.wins,
+            },
+          },
+          team: rec?.name ?? stat.teamCode,
+          teamCode: stat.teamCode,
+        };
+      });
+
+    result.push({ group, rows });
+  }
+  return result;
+}
+
 function resolveDirectGroupSlot(
   label: string,
   standingsByGroup: Map<string, GroupStanding>,
@@ -228,11 +316,6 @@ export function projectKnockoutRounds(
     if (fixture.homeTeam && fixture.awayTeam) {
       const key = [fixture.homeTeam, fixture.awayTeam].sort().join(":");
       fixtureByTeamPair.set(key, fixture);
-      // DEBUG: log knockout-stage fixtures only
-      if (!worldCupGroups.includes(fixture.group) || fixture.statusShort === "FT") {
-        const isR32 = (fixture.homeScore !== null && fixture.awayScore !== null);
-        if (isR32) console.log(`[KO-DEBUG] pair=${key} status=${fixture.statusShort} score=${fixture.homeScore}-${fixture.awayScore}`);
-      }
     }
   }
 
