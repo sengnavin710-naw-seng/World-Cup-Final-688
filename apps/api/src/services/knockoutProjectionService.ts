@@ -324,6 +324,9 @@ export function projectKnockoutRounds(
       fixtureByTeamPair.set(key, fixture);
     }
   }
+  // DEBUG
+  const dbg = fixtureByTeamPair.get("CAN:ZAF");
+  console.log(`[KO-DEBUG] map.size=${fixtureByTeamPair.size} CAN:ZAF=${dbg ? `hs=${dbg.homeScore} as=${dbg.awayScore} ss=${dbg.statusShort}` : "NOT_FOUND"}`);
 
   // Track winner of each match number so "Winner Match N" placeholders can be resolved
   const winnerByMatchNumber = new Map<number, string>();
