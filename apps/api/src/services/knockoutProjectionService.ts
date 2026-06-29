@@ -209,6 +209,12 @@ export function computeStandingsFromFixtures(fixtures: Fixture[]): GroupStanding
     const { group, homeTeam, awayTeam, homeScore, awayScore } = fixture;
     if (!homeTeam || !awayTeam) continue;
 
+    // Skip cross-group fixtures (mislabeled knockout matches)
+    const homeRec = teamByCode.get(homeTeam);
+    const awayRec = teamByCode.get(awayTeam);
+    if (!homeRec || !awayRec || homeRec.group !== awayRec.group) continue;
+
+
     if (!statsByGroup.has(group)) statsByGroup.set(group, new Map());
     const gs = statsByGroup.get(group)!;
 
