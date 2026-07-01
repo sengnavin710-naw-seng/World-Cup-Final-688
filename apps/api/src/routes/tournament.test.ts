@@ -266,6 +266,80 @@ test("knockout endpoint projects confirmed group positions from API-Football", a
   });
 });
 
+test("knockout endpoint overlays API-Football round of 16 teams when fixture teams are already known", async () => {
+  process.env.FOOTBALL_API_BASE_URL = "https://v3.football.api-sports.io";
+  process.env.FOOTBALL_API_KEY = "test-key";
+  process.env.FOOTBALL_WORLD_CUP_LEAGUE_ID = "1";
+  process.env.FOOTBALL_WORLD_CUP_SEASON = "2026";
+
+  const makeApiFixture = (
+    id: number,
+    date: string,
+    home: { code: string; name: string },
+    away: { code: string; name: string },
+  ) => ({
+    fixture: {
+      date,
+      id,
+      status: { elapsed: null, long: "Not Started", short: "NS" },
+      venue: { name: "Philadelphia Stadium" },
+    },
+    goals: { away: null, home: null },
+    league: { round: "Round of 16" },
+    teams: { away, home },
+  });
+
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url = String(input);
+
+    if (url.includes("/fixtures?")) {
+      return {
+        json: async () => ({
+          errors: [],
+          response: [
+            makeApiFixture(
+              4001,
+              "2026-07-04T03:00:00+00:00",
+              { code: "GER", name: "Germany" },
+              { code: "SCO", name: "Scotland" },
+            ),
+          ],
+        }),
+        ok: true,
+      } as Response;
+    }
+
+    return {
+      json: async () => ({
+        errors: [],
+        response: [
+          {
+            league: {
+              standings: [],
+            },
+          },
+        ],
+      }),
+      ok: true,
+    } as Response;
+  });
+
+  const app = createServer();
+  const response = await request(app).get("/api/tournament/knockout");
+  const roundOf16 = response.body.knockout.find(
+    (round: { round: string }) => round.round === "Round of 16",
+  );
+
+  expect(response.status).toBe(200);
+  expect(roundOf16.matches[0]).toMatchObject({
+    awayTeam: "SCO",
+    awayTeamConfirmed: true,
+    homeTeam: "GER",
+    homeTeamConfirmed: true,
+    kickoff: "2026-07-04T03:00:00+00:00",
+  });
+});
+
 test("knockout endpoint falls back to the static bracket when API-Football is unreachable", async () => {
   process.env.FOOTBALL_API_BASE_URL = "https://v3.football.api-sports.io";
   process.env.FOOTBALL_API_KEY = "test-key";

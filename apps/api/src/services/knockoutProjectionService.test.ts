@@ -121,6 +121,177 @@ test("marks direct group slots confirmed only after all six group fixtures finis
   });
 });
 
+test("advances the penalty shootout winner from Round of 32 into Round of 16", () => {
+  const projected = projectKnockoutRounds(
+    knockout,
+    [
+      makeGroup("E", [
+        { code: "GER", points: 7 },
+        { code: "ECU", points: 5 },
+        { code: "CIV", points: 4 },
+        { code: "CUW", points: 1 },
+      ]),
+    ],
+    [
+      {
+        awayFlag: "",
+        awayScore: 1,
+        awayTeam: "PAR",
+        awayTeamName: "Paraguay",
+        awayWinner: true,
+        group: "E",
+        homeFlag: "",
+        homeScore: 1,
+        homeTeam: "GER",
+        homeTeamName: "Germany",
+        homeWinner: false,
+        id: "api-football-penalty-74",
+        kickoff: "2026-06-29T20:30:00+00:00",
+        matchNumber: 74,
+        penaltyAwayScore: 4,
+        penaltyHomeScore: 3,
+        round: "Round of 32",
+        statusShort: "PEN",
+        venue: "Boston Stadium",
+      },
+    ],
+  );
+
+  const match89 = projected
+    .find((round) => round.round === "Round of 16")
+    ?.matches.find((match) => match.matchNumber === 89);
+
+  expect(match89).toMatchObject({
+    homeTeam: "PAR",
+    homeTeamConfirmed: true,
+  });
+});
+
+test("does not copy a known Round of 16 fixture into another unresolved bracket slot", () => {
+  const projected = projectKnockoutRounds(
+    knockout,
+    [
+      makeGroup("A", [
+        { code: "MEX", points: 7 },
+        { code: "KOR", points: 5 },
+        { code: "ZAF", points: 4 },
+        { code: "CZE", points: 1 },
+      ]),
+      makeGroup("B", [
+        { code: "CAN", points: 7 },
+        { code: "SUI", points: 5 },
+        { code: "BIH", points: 4 },
+        { code: "QAT", points: 1 },
+      ]),
+      makeGroup("E", [
+        { code: "GER", points: 7 },
+        { code: "ECU", points: 5 },
+        { code: "CIV", points: 4 },
+        { code: "CUW", points: 1 },
+      ]),
+      makeGroup("F", [
+        { code: "NED", points: 7 },
+        { code: "JPN", points: 5 },
+        { code: "SWE", points: 4 },
+        { code: "TUN", points: 1 },
+      ]),
+    ],
+    [
+      {
+        awayFlag: "",
+        awayScore: 1,
+        awayTeam: "PAR",
+        awayTeamName: "Paraguay",
+        awayWinner: true,
+        group: "E",
+        homeFlag: "",
+        homeScore: 1,
+        homeTeam: "GER",
+        homeTeamName: "Germany",
+        homeWinner: false,
+        id: "api-football-penalty-74",
+        kickoff: "2026-06-29T20:30:00+00:00",
+        matchNumber: 74,
+        penaltyAwayScore: 4,
+        penaltyHomeScore: 3,
+        round: "Round of 32",
+        statusShort: "PEN",
+        venue: "Boston Stadium",
+      },
+      {
+        awayFlag: "",
+        awayScore: 1,
+        awayTeam: "MAR",
+        awayTeamName: "Morocco",
+        awayWinner: true,
+        group: "F",
+        homeFlag: "",
+        homeScore: 1,
+        homeTeam: "NED",
+        homeTeamName: "Netherlands",
+        homeWinner: false,
+        id: "api-football-penalty-75",
+        kickoff: "2026-06-30T01:00:00+00:00",
+        matchNumber: 75,
+        penaltyAwayScore: 3,
+        penaltyHomeScore: 2,
+        round: "Round of 32",
+        statusShort: "PEN",
+        venue: "Estadio Monterrey",
+      },
+      {
+        awayFlag: "",
+        awayScore: 1,
+        awayTeam: "CAN",
+        awayTeamName: "Canada",
+        awayWinner: true,
+        group: "A",
+        homeFlag: "",
+        homeScore: 0,
+        homeTeam: "ZAF",
+        homeTeamName: "South Africa",
+        homeWinner: false,
+        id: "api-football-73",
+        kickoff: "2026-06-28T19:00:00+00:00",
+        matchNumber: 73,
+        round: "Round of 32",
+        statusShort: "FT",
+        venue: "Los Angeles Stadium",
+      },
+      {
+        awayFlag: "",
+        awayScore: null,
+        awayTeam: "MAR",
+        awayTeamName: "Morocco",
+        group: "",
+        homeFlag: "",
+        homeScore: null,
+        homeTeam: "CAN",
+        homeTeamName: "Canada",
+        id: "api-football-r16-90",
+        kickoff: "2026-07-04T17:00:00+00:00",
+        matchNumber: 90,
+        round: "Round of 16",
+        statusShort: "NS",
+        venue: "Houston Stadium",
+      },
+    ],
+  );
+
+  const r16 = projected.find((round) => round.round === "Round of 16")?.matches;
+  const match89 = r16?.find((match) => match.matchNumber === 89);
+  const match90 = r16?.find((match) => match.matchNumber === 90);
+
+  expect(match89).toMatchObject({
+    awayTeam: "Winner Match 77",
+    homeTeam: "PAR",
+  });
+  expect(match90).toMatchObject({
+    awayTeam: "MAR",
+    homeTeam: "CAN",
+  });
+});
+
 test("ranks the best eight third-placed teams using table statistics", () => {
   const standings = "ABCDEFGHIJKL".split("").map((group, index) =>
     makeGroup(group, [
