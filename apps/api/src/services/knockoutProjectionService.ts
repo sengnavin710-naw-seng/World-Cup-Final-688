@@ -353,6 +353,28 @@ export function projectKnockoutRounds(
     list.sort(); // sort chronologically within each date
   }
 
+  const apiKnockoutFixturesByRound = new Map<string, Fixture[]>();
+  for (const fixture of fixtures) {
+    if (!["Round of 16", "Quarter-finals", "Semi-finals", "Finals"].includes(fixture.round)) {
+      continue;
+    }
+
+    apiKnockoutFixturesByRound.set(fixture.round, [
+      ...(apiKnockoutFixturesByRound.get(fixture.round) ?? []),
+      fixture,
+    ]);
+  }
+  for (const [, roundFixtures] of apiKnockoutFixturesByRound) {
+    roundFixtures.sort((left, right) => {
+      const dateDiff = left.kickoff.localeCompare(right.kickoff);
+      if (dateDiff !== 0) {
+        return dateDiff;
+      }
+
+      return left.venue.localeCompare(right.venue);
+    });
+  }
+
   // Track winner of each match number so "Winner Match N" placeholders can be resolved
   const winnerByMatchNumber = new Map<number, string>();
 
@@ -381,8 +403,30 @@ export function projectKnockoutRounds(
     live: Fixture | undefined,
   ) {
     if (!live?.statusShort || !terminalFixtureStatuses.has(live.statusShort)) return;
+    if (live.homeWinner === true && live.awayWinner !== true && isTeamCode(live.homeTeam)) {
+      winnerByMatchNumber.set(matchNumber, live.homeTeam);
+      return;
+    }
+    if (live.awayWinner === true && live.homeWinner !== true && isTeamCode(live.awayTeam)) {
+      winnerByMatchNumber.set(matchNumber, live.awayTeam);
+      return;
+    }
     const h = live.homeScore ?? 0;
     const a = live.awayScore ?? 0;
+    if (h === a && live.statusShort === "PEN") {
+      const penaltyHome = live.penaltyHomeScore;
+      const penaltyAway = live.penaltyAwayScore;
+
+      if (penaltyHome == null || penaltyAway == null || penaltyHome === penaltyAway) {
+        return;
+      }
+
+      const winner = penaltyHome > penaltyAway ? live.homeTeam : live.awayTeam;
+      if (isTeamCode(winner)) {
+        winnerByMatchNumber.set(matchNumber, winner);
+      }
+      return;
+    }
     if (h === a) return; // draw should not occur in knockout (PEN = draw in regular time only)
     if (h > a) {
       // home side of fixture won — find which resolved code that is
@@ -424,7 +468,25 @@ export function projectKnockoutRounds(
               if (crossFx.statusShort && terminalFixtureStatuses.has(crossFx.statusShort)) {
                 const h = normHomeScore ?? 0;
                 const a = normAwayScore ?? 0;
-                if (h !== a) {
+                if (crossFx.homeWinner === true && crossFx.awayWinner !== true) {
+                  winnerByMatchNumber.set(match.matchNumber, crossFx.homeTeam);
+                } else if (crossFx.awayWinner === true && crossFx.homeWinner !== true) {
+                  winnerByMatchNumber.set(match.matchNumber, crossFx.awayTeam);
+                } else if (h === a && crossFx.statusShort === "PEN") {
+                  const normPenaltyHome = isHomeInFx ? crossFx.penaltyHomeScore : crossFx.penaltyAwayScore;
+                  const normPenaltyAway = isHomeInFx ? crossFx.penaltyAwayScore : crossFx.penaltyHomeScore;
+
+                  if (
+                    normPenaltyHome != null &&
+                    normPenaltyAway != null &&
+                    normPenaltyHome !== normPenaltyAway
+                  ) {
+                    winnerByMatchNumber.set(
+                      match.matchNumber,
+                      normPenaltyHome > normPenaltyAway ? resolvedHomeCode : resolvedAwayCode,
+                    );
+                  }
+                } else if (h !== a) {
                   winnerByMatchNumber.set(match.matchNumber, h > a ? resolvedHomeCode : resolvedAwayCode);
                 }
               }
@@ -437,6 +499,10 @@ export function projectKnockoutRounds(
                 awayTeamConfirmed: homeDirect?.confirmed ?? false,
                 homeScore: (normHomeScore ?? match.homeScore) as number,
                 awayScore: (normAwayScore ?? match.awayScore) as number,
+                homeWinner: isHomeInFx ? crossFx.homeWinner : crossFx.awayWinner,
+                awayWinner: isHomeInFx ? crossFx.awayWinner : crossFx.homeWinner,
+                penaltyHomeScore: isHomeInFx ? crossFx.penaltyHomeScore : crossFx.penaltyAwayScore,
+                penaltyAwayScore: isHomeInFx ? crossFx.penaltyAwayScore : crossFx.penaltyHomeScore,
                 statusShort: crossFx.statusShort ?? match.statusShort,
                 kickoff: crossFx.kickoff ?? match.kickoff,
               };
@@ -460,6 +526,10 @@ export function projectKnockoutRounds(
             awayTeamConfirmed: awayDirect?.confirmed ?? (awayThird ? allGroupsComplete : false),
             homeScore: (live?.homeScore ?? match.homeScore) as number,
             awayScore: (live?.awayScore ?? match.awayScore) as number,
+            homeWinner: live?.homeWinner ?? match.homeWinner,
+            awayWinner: live?.awayWinner ?? match.awayWinner,
+            penaltyHomeScore: live?.penaltyHomeScore ?? match.penaltyHomeScore,
+            penaltyAwayScore: live?.penaltyAwayScore ?? match.penaltyAwayScore,
             statusShort: live?.statusShort ?? match.statusShort,
             kickoff: live?.kickoff ?? match.kickoff,
           };
@@ -488,27 +558,43 @@ export function projectKnockoutRounds(
 
     return {
       ...round,
-      matches: round.matches.map((match) => {
+      matches: round.matches.map((match, matchIndex) => {
         const homePlaceholder = match.homeTeamPlaceholder ?? match.homeTeam;
         const awayPlaceholder = match.awayTeamPlaceholder ?? match.awayTeam;
 
         const resolvedHome = resolveWinnerSlot(homePlaceholder);
         const resolvedAway = resolveWinnerSlot(awayPlaceholder);
 
-        const live = liveForPair(resolvedHome, resolvedAway);
-        recordWinner(match.matchNumber, resolvedHome, resolvedAway, live);
+        const roundFixtures = apiKnockoutFixturesByRound.get(round.round) ?? [];
+        const overlayFixture = roundFixtures.find(
+          (fixture) =>
+            fixture.kickoff.substring(0, 10) === match.kickoff.substring(0, 10) &&
+            fixture.venue === match.venue,
+        );
+        const live = liveForPair(resolvedHome, resolvedAway) ?? overlayFixture;
+        const displayHome = isTeamCode(resolvedHome)
+          ? resolvedHome
+          : overlayFixture?.homeTeam ?? resolvedHome;
+        const displayAway = isTeamCode(resolvedAway)
+          ? resolvedAway
+          : overlayFixture?.awayTeam ?? resolvedAway;
+        recordWinner(match.matchNumber, displayHome, displayAway, live);
 
         // Fix score orientation: if fixture home/away differs from our resolved home/away, swap
-        const scoreSwap = live && isTeamCode(resolvedHome) && live.homeTeam !== resolvedHome;
+        const scoreSwap = live && isTeamCode(displayHome) && live.homeTeam !== displayHome;
 
         return {
           ...match,
-          homeTeam: resolvedHome,
-          homeTeamConfirmed: isTeamCode(resolvedHome),
-          awayTeam: resolvedAway,
-          awayTeamConfirmed: isTeamCode(resolvedAway),
+          homeTeam: displayHome,
+          homeTeamConfirmed: isTeamCode(displayHome),
+          awayTeam: displayAway,
+          awayTeamConfirmed: isTeamCode(displayAway),
           homeScore: live ? (scoreSwap ? (live.awayScore ?? match.homeScore) as number : (live.homeScore ?? match.homeScore) as number) : match.homeScore,
           awayScore: live ? (scoreSwap ? (live.homeScore ?? match.awayScore) as number : (live.awayScore ?? match.awayScore) as number) : match.awayScore,
+          homeWinner: live ? (scoreSwap ? live.awayWinner : live.homeWinner) : match.homeWinner,
+          awayWinner: live ? (scoreSwap ? live.homeWinner : live.awayWinner) : match.awayWinner,
+          penaltyHomeScore: live ? (scoreSwap ? live.penaltyAwayScore : live.penaltyHomeScore) : match.penaltyHomeScore,
+          penaltyAwayScore: live ? (scoreSwap ? live.penaltyHomeScore : live.penaltyAwayScore) : match.penaltyAwayScore,
           statusShort: live?.statusShort ?? match.statusShort,
           kickoff: live?.kickoff ?? kickoffByMatchId.get(match.id) ?? match.kickoff,
         };

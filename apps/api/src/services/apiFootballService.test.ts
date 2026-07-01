@@ -80,6 +80,36 @@ test("preserves scores and live status from API-Football fixtures", () => {
   });
 });
 
+test("preserves knockout winner and penalty shootout scores from API-Football fixtures", () => {
+  const fixtures = mapApiFootballFixtures([
+    {
+      fixture: {
+        id: 1565176,
+        date: "2026-06-29T20:30:00+00:00",
+        status: { elapsed: 120, long: "Match Finished", short: "PEN" },
+        venue: { name: "Boston Stadium" },
+      },
+      goals: { away: 1, home: 1 },
+      league: { round: "Round of 32" },
+      score: { penalty: { away: 4, home: 3 } },
+      teams: {
+        away: { name: "Paraguay", winner: true },
+        home: { name: "Germany", winner: false },
+      },
+    },
+  ]);
+
+  expect(fixtures[0]).toMatchObject({
+    awayTeam: "PAR",
+    awayWinner: true,
+    homeTeam: "GER",
+    homeWinner: false,
+    penaltyAwayScore: 4,
+    penaltyHomeScore: 3,
+    statusShort: "PEN",
+  });
+});
+
 test("maps Cape Verde Islands without dropping its fixtures", () => {
   const fixtures = mapApiFootballFixtures([
     {

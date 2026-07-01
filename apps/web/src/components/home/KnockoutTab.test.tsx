@@ -134,6 +134,23 @@ const ownedTeams: Team[] = [
   },
 ];
 
+const penaltyTeams: Team[] = [
+  {
+    code: "GER",
+    name: "Germany",
+    group: "E",
+    flag: "GER",
+    isOwned: false,
+  },
+  {
+    code: "PAR",
+    name: "Paraguay",
+    group: "D",
+    flag: "PAR",
+    isOwned: false,
+  },
+];
+
 function makeTestMatch(
   matchNumber: number,
   roundPrefix: string,
@@ -336,6 +353,48 @@ test("shows only confirmed teams and preserves placeholders in Confirmed mode", 
   expect(screen.queryByText("Projected Germany")).not.toBeInTheDocument();
   expect(screen.queryByText("Projected Mexico")).not.toBeInTheDocument();
   expect(screen.queryByText("Projected Canada")).not.toBeInTheDocument();
+});
+
+test("marks the penalty shootout loser as eliminated in knockout cards", () => {
+  const penaltyRounds: KnockoutRound[] = [
+    {
+      round: "Round of 32",
+      matches: [
+        {
+          awayScore: 1,
+          awayTeam: "PAR",
+          awayWinner: true,
+          homeScore: 1,
+          homeTeam: "GER",
+          homeWinner: false,
+          id: "penalty-match",
+          kickoff: "2026-06-29T20:30:00+00:00",
+          matchNumber: 74,
+          penaltyAwayScore: 4,
+          penaltyHomeScore: 3,
+          statusShort: "PEN",
+          venue: "Boston Stadium",
+        },
+      ],
+    },
+  ];
+
+  render(<KnockoutTab rounds={penaltyRounds} teams={penaltyTeams} />);
+
+  const germanyLabels = screen.getAllByText(/Germany|GER/);
+  const paraguayLabels = screen.getAllByText(/Paraguay|PAR/);
+
+  expect(
+    germanyLabels.some((label) =>
+      label.closest(".knockout-team-name")?.classList.contains("knockout-team-loser"),
+    ),
+  ).toBe(true);
+  expect(
+    paraguayLabels.every(
+      (label) =>
+        !label.closest(".knockout-team-name")?.classList.contains("knockout-team-loser"),
+    ),
+  ).toBe(true);
 });
 
 test("formats knockout ISO dates with a default kickoff time", () => {

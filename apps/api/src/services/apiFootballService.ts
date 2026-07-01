@@ -12,6 +12,7 @@ export type ApiFootballConfig = {
 type ApiFootballTeam = {
   code?: string | null;
   name?: string | null;
+  winner?: boolean | null;
 };
 
 type ApiFootballFixture = {
@@ -30,6 +31,12 @@ type ApiFootballFixture = {
   goals?: {
     away?: number | null;
     home?: number | null;
+  } | null;
+  score?: {
+    penalty?: {
+      home?: number | null;
+      away?: number | null;
+    } | null;
   } | null;
   league?: {
     round?: string | null;
@@ -183,6 +190,28 @@ function inferFixtureGroup(homeTeam?: TeamRecord, awayTeam?: TeamRecord, roundLa
   return homeTeam?.group ?? awayTeam?.group ?? "";
 }
 
+function normalizeRoundLabel(roundLabel?: string | null, group?: string) {
+  const normalized = roundLabel?.toLowerCase() ?? "";
+
+  if (normalized.includes("round of 16")) {
+    return "Round of 16";
+  }
+
+  if (normalized.includes("quarter")) {
+    return "Quarter-finals";
+  }
+
+  if (normalized.includes("semi")) {
+    return "Semi-finals";
+  }
+
+  if (normalized.includes("final")) {
+    return "Finals";
+  }
+
+  return group ? `Group ${group}` : roundLabel ?? "";
+}
+
 function sortApiFootballFixtures(fixtures: ApiFootballFixture[]) {
   return [...fixtures].sort((left, right) => {
     const leftDate = left.fixture?.date ?? "";
@@ -211,15 +240,19 @@ export function mapApiFootballFixtures(apiFixtures: ApiFootballFixture[]): Fixtu
       awayScore: fixture.goals?.away ?? null,
       awayTeam: awayTeam.code,
       awayTeamName: awayTeam.name,
+      awayWinner: fixture.teams?.away?.winner ?? null,
       group,
       homeFlag: homeTeam.flag,
       homeScore: fixture.goals?.home ?? null,
       homeTeam: homeTeam.code,
       homeTeamName: homeTeam.name,
+      homeWinner: fixture.teams?.home?.winner ?? null,
       id: `api-football-${fixture.fixture?.id ?? index + 1}`,
       kickoff: fixture.fixture?.date ?? "",
       matchNumber: index + 1,
-      round: `Group ${group}`,
+      penaltyHomeScore: fixture.score?.penalty?.home ?? null,
+      penaltyAwayScore: fixture.score?.penalty?.away ?? null,
+      round: normalizeRoundLabel(fixture.league?.round, group),
       statusElapsed: fixture.fixture?.status?.elapsed ?? null,
       statusLong: fixture.fixture?.status?.long ?? "",
       statusShort: fixture.fixture?.status?.short ?? "",

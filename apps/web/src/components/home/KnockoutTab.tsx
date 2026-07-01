@@ -787,6 +787,16 @@ function isFinished(statusShort?: string) {
 
 function getLoser(match: KnockoutMatch): "home" | "away" | null {
   if (!isFinished(match.statusShort)) return null;
+  if (match.homeWinner === true && match.awayWinner !== true) return "away";
+  if (match.awayWinner === true && match.homeWinner !== true) return "home";
+  if (
+    match.statusShort === "PEN" &&
+    match.penaltyHomeScore != null &&
+    match.penaltyAwayScore != null &&
+    match.penaltyHomeScore !== match.penaltyAwayScore
+  ) {
+    return match.penaltyHomeScore > match.penaltyAwayScore ? "away" : "home";
+  }
   if (match.homeScore > match.awayScore) return "away";
   if (match.awayScore > match.homeScore) return "home";
   return null; // draw (shouldn't happen in knockout, but safe)
