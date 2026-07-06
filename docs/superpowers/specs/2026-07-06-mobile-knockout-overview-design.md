@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add a second mobile-only knockout view that presents the entire tournament bracket as a vertically scrolling overview, matching the supplied reference. The existing round-by-round mobile view and the desktop bracket remain unchanged.
+Add a second mobile-only knockout view that presents the tournament from the Round of 16 through the Finals as a vertically scrolling overview, matching the supplied reference. The existing round-by-round mobile view and the desktop bracket remain unchanged.
 
 ## User Experience
 
@@ -11,7 +11,7 @@ The mobile knockout screen has two view modes:
 - `detail`: the existing round selector and horizontally swiped round view.
 - `overview`: the complete bracket fitted to the viewport width and scrolled only vertically.
 
-A fixed circular button near the lower-right corner switches between the modes. It respects the device safe area and remains visible while the bracket scrolls. Pressing it again returns to detail mode with the previously selected round and scroll position preserved.
+A fixed circular button near the lower-right corner switches between the modes. It remains above iPhone Safari and mobile Chrome bottom browser controls by reserving browser-toolbar clearance in addition to `safe-area-inset-bottom`. Installed standalone/PWA mode uses the smaller safe-area-only clearance. Pressing it again returns to detail mode with the previously selected round and scroll position preserved.
 
 The overview hides the round selector. It retains the current visual theme and uses the same flags, team labels, scores, dates, loser treatment, Final and Bronze-final badges, and champion trophy as the existing knockout UI.
 
@@ -19,10 +19,11 @@ The overview hides the round selector. It retains the current visual theme and u
 
 The overview uses a dedicated narrow-screen layout instead of scaling the desktop canvas.
 
-- The first tournament branch begins at the top and converges downward through its rounds toward the semi-final and Final.
+- Round of 32 matches are omitted from overview mode.
+- Four Round of 16 cards form one horizontal row at the top and converge downward through two Quarter-finals and one Semi-final.
 - The Final, Bronze-final, and champion presentation occupy the center portion of the vertical bracket.
-- The second tournament branch continues below the center and expands downward in the opposite direction.
-- Match cards are sized from the available viewport width. Their text remains readable at supported widths and no card or connector extends beyond the horizontal viewport.
+- The second Semi-final continues below the center and expands downward through two Quarter-finals into four Round of 16 cards on one horizontal row at the bottom.
+- The four-column Round of 16 cards are sized from the available viewport width and use compact flags, abbreviated team labels, scores, and dates. No card or connector extends beyond the horizontal viewport.
 - Cards show two teams, flags, abbreviated labels, and either completed scores or the scheduled date.
 - Losing teams remain visually subdued without changing a completed card to white.
 - Connector lines are rendered as a static SVG layer with no scroll-time animation or expensive filters.
@@ -72,8 +73,10 @@ Automated tests cover:
 - Hiding and restoring the round selector.
 - Preserving the selected detail round across mode switches.
 - Producing overview geometry without horizontal overflow at 320, 375, 390, and 430 pixel viewport widths.
+- Rendering exactly eight Round of 16 matches in overview, with four sharing the top row and four sharing the bottom row, and rendering no Round of 32 matches.
 - Rendering completed scores, penalties where applicable, future dates, placeholders, Final, Bronze-final, loser styling, and champion presentation.
 - Preventing overview gestures from invoking round navigation or the parent tab swipe.
+- Keeping the view toggle above browser bottom controls on iPhone Safari and mobile Chrome while retaining safe-area spacing in standalone mode.
 
 Run the focused component tests, lint, and production build. Perform screenshot and interaction checks at representative mobile widths, including vertical scrolling and safe-area spacing for the floating button. Confirm that desktop layout and behavior are unchanged.
 
