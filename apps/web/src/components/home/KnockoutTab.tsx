@@ -1,7 +1,11 @@
-import { Trophy } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { CSSProperties, TouchEvent } from "react";
+import { Network, Rows3 } from "lucide-react";
 import type { KnockoutRound, Team } from "../../lib/types";
+import {
+  getKnockoutOverviewLayout,
+  type OverviewPositionedMatch,
+} from "./knockoutOverviewLayout";
 
 type KnockoutMatch = KnockoutRound["matches"][number];
 type BracketSide = "left" | "right";
@@ -56,10 +60,10 @@ type ResolvedKnockoutTeam = {
 // Col-3: 2 matches
 // Col-4: 1 match (center of board)
 const board = {
-  width: 1600,
-  height: 1050,
-  cardWidth: 130,
-  cardHeight: 104,
+  width: 1424,
+  height: 780,
+  cardWidth: 90,
+  cardHeight: 90,
 };
 
 // Add 12px inner horizontal padding so cards at board edges
@@ -68,16 +72,16 @@ const BOARD_H_PAD = 12;
 
 const leftColumnX = new Map([
   [1, BOARD_H_PAD],
-  [2, BOARD_H_PAD + 212],
-  [3, BOARD_H_PAD + 412],
-  [4, BOARD_H_PAD + 598],
+  [2, BOARD_H_PAD + 203],
+  [3, BOARD_H_PAD + 369],
+  [4, BOARD_H_PAD + 535],
 ]);
 
 const rightColumnX = new Map([
-  [1, 1600 - board.cardWidth - BOARD_H_PAD],
-  [2, 1600 - board.cardWidth - BOARD_H_PAD - 212],
-  [3, 1600 - board.cardWidth - BOARD_H_PAD - 412],
-  [4, 1600 - board.cardWidth - BOARD_H_PAD - 598],
+  [1, board.width - board.cardWidth - BOARD_H_PAD],
+  [2, board.width - board.cardWidth - BOARD_H_PAD - 203],
+  [3, board.width - board.cardWidth - BOARD_H_PAD - 369],
+  [4, board.width - board.cardWidth - BOARD_H_PAD - 535],
 ]);
 
 // pitch = 1050/8 = 131.25 → centers at 65, 196, 327, 458, 589, 720, 851, 982
@@ -85,10 +89,10 @@ const rightColumnX = new Map([
 // col-3 centers: 262, 786  → rounded to 262, 786
 // col-4 center: 524
 const rowCenters = new Map([
-  [1, [65, 196, 327, 458, 589, 720, 851, 982]],
-  [2, [131, 393, 655, 917]],
-  [3, [262, 786]],
-  [4, [524]],
+  [1, [57, 154, 251, 348, 445, 542, 639, 736]],
+  [2, [106, 300, 494, 688]],
+  [3, [203, 591]],
+  [4, [397]],
 ]);
 
 const mobileBoard = {
@@ -130,8 +134,7 @@ function getMatchPosition(match: KnockoutMatch) {
   if (match.side === "center") {
     return {
       x: (board.width - board.cardWidth) / 2,
-      // Final at ~55% height, Bronze at ~72% height
-      y: (slot === 1 ? Math.round(board.height * 0.55) : Math.round(board.height * 0.72)) - board.cardHeight / 2,
+      y: (slot === 1 ? Math.round(board.height * 0.5) : Math.round(board.height * 0.66)) - board.cardHeight / 2,
     };
   }
 
@@ -292,6 +295,25 @@ function formatKnockoutKickoff(kickoff: string) {
   };
 }
 
+function formatKnockoutDesktopDate(kickoff: string) {
+  const normalized = kickoff.trim();
+  const isoDateMatch = normalized.match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+  if (!isoDateMatch) {
+    return { dateTime: undefined, label: normalized };
+  }
+
+  const [, year, month, day] = isoDateMatch;
+  const utcDate = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+
+  return {
+    dateTime: normalized.includes("T")
+      ? normalized
+      : `${year}-${month}-${day}T${defaultKnockoutKickoffTime}`,
+    label: `${monthLabels[utcDate.getUTCMonth()]} ${Number(day)}`,
+  };
+}
+
 function resolveKnockoutTeam(value: string, teams: Team[]): ResolvedKnockoutTeam {
   const normalizedValue = value.trim().toLowerCase();
   const team = teams.find(
@@ -312,7 +334,7 @@ function resolveKnockoutTeam(value: string, teams: Team[]): ResolvedKnockoutTeam
         .trim();
 
   // Use full name for mobile; fallback to shortened label for placeholders
-  const fullLabel = team ? team.name : label;
+  const fullLabel = team ? team.name : value;
 
   return {
     fullLabel,
@@ -354,7 +376,7 @@ function KnockoutTeamName({ mobile, teams, value, loser }: { mobile?: boolean; t
     <span className={`knockout-team-name${loser ? " knockout-team-loser" : ""}`}>
       <span className="knockout-team-label">{displayLabel}</span>
       {resolved.ownerName ? (
-        <small className="knockout-owner-name">({resolved.ownerName})</small>
+        <small className="knockout-owner-name">{resolved.ownerName}</small>
       ) : null}
     </span>
   );
@@ -669,25 +691,25 @@ function getMobileBracketLayout(
   rounds: KnockoutRound[],
   scrollLeft = 0,
   expandedFinalWidth = mobileBoard.cardWidth,
+  anchoredLayouts?: ReturnType<typeof getAnchoredMobileBracketLayout>[],
 ) {
   const roundOffsets = getMobileRoundOffsets(rounds);
 
   if (rounds.length <= 1) {
-    return getAnchoredMobileBracketLayout(rounds, 0, expandedFinalWidth);
+    return anchoredLayouts?.[0] ?? getAnchoredMobileBracketLayout(rounds, 0, expandedFinalWidth);
   }
 
   const { fromRoundIndex, progress, toRoundIndex } = getMobileRoundMotion(
     roundOffsets,
     getMobileViewportAnchor(scrollLeft),
   );
-  const fromLayout = getAnchoredMobileBracketLayout(
-    rounds,
-    fromRoundIndex,
-    expandedFinalWidth,
-  );
+  const fromLayout =
+    anchoredLayouts?.[fromRoundIndex] ??
+    getAnchoredMobileBracketLayout(rounds, fromRoundIndex, expandedFinalWidth);
   const toLayout =
     progress > 0
-      ? getAnchoredMobileBracketLayout(rounds, toRoundIndex, expandedFinalWidth)
+      ? anchoredLayouts?.[toRoundIndex] ??
+        getAnchoredMobileBracketLayout(rounds, toRoundIndex, expandedFinalWidth)
       : fromLayout;
   const matchesByRound = fromLayout.matchesByRound.map((roundMatches, roundIndex) =>
     roundMatches.map((match, matchIndex) => {
@@ -802,10 +824,195 @@ function getLoser(match: KnockoutMatch): "home" | "away" | null {
   return null; // draw (shouldn't happen in knockout, but safe)
 }
 
+function getMatchScoreLabel(match: KnockoutMatch) {
+  const baseScore = `${match.homeScore}-${match.awayScore}`;
+
+  if (
+    match.statusShort === "PEN" &&
+    match.penaltyHomeScore != null &&
+    match.penaltyAwayScore != null
+  ) {
+    return `${baseScore} (${match.penaltyHomeScore}-${match.penaltyAwayScore} pens)`;
+  }
+
+  return baseScore;
+}
+
+function MatchScore({ final, match }: { final?: boolean; match: KnockoutMatch }) {
+  return (
+    <div className={`knockout-card-score${final ? " knockout-card-score-final" : ""}`}>
+      <span>{match.homeScore}</span>
+      <span className="knockout-card-score-sep">-</span>
+      <span>{match.awayScore}</span>
+      {match.statusShort === "PEN" &&
+      match.penaltyHomeScore != null &&
+      match.penaltyAwayScore != null ? (
+        <span className="knockout-card-score-pens">
+          ({match.penaltyHomeScore}-{match.penaltyAwayScore} pens)
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function ChampionTrophy({ className, mobileOptimized = false }: { className?: string; mobileOptimized?: boolean }) {
+  const svgId = useId().replace(/:/g, "");
+  const cupId = `${svgId}-champion-trophy-cup`;
+  const globeId = `${svgId}-champion-trophy-globe`;
+  const baseId = `${svgId}-champion-trophy-base`;
+  const darkId = `${svgId}-champion-trophy-dark`;
+  const glowId = `${svgId}-champion-trophy-glow`;
+
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      shapeRendering="geometricPrecision"
+      viewBox="0 0 120 120"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <defs>
+        <radialGradient id={globeId} cx="38%" cy="24%" r="72%">
+          <stop offset="0" stopColor="#fff7d7" />
+          <stop offset="0.34" stopColor="#f0c87b" />
+          <stop offset="0.72" stopColor="#b9782c" />
+          <stop offset="1" stopColor="#5b2b15" />
+        </radialGradient>
+        <linearGradient id={cupId} x1="30" x2="82" y1="33" y2="99">
+          <stop offset="0" stopColor="#fff1bb" />
+          <stop offset="0.28" stopColor="#d49a4a" />
+          <stop offset="0.62" stopColor="#f7d58e" />
+          <stop offset="1" stopColor="#6f3518" />
+        </linearGradient>
+        <linearGradient id={baseId} x1="34" x2="86" y1="88" y2="116">
+          <stop offset="0" stopColor="#9a5e2b" />
+          <stop offset="0.46" stopColor="#f3ce82" />
+          <stop offset="1" stopColor="#5c2a15" />
+        </linearGradient>
+        <linearGradient id={darkId} x1="34" x2="82" y1="42" y2="98">
+          <stop offset="0" stopColor="#5f2c16" />
+          <stop offset="1" stopColor="#241006" />
+        </linearGradient>
+        <filter id={glowId} colorInterpolationFilters="sRGB" height="152" width="152" x="-16" y="-16">
+          <feDropShadow dx="0" dy="10" floodColor="#a76525" floodOpacity="0.28" stdDeviation="8" />
+        </filter>
+      </defs>
+      <g filter={mobileOptimized ? undefined : `url(#${glowId})`}>
+        <path
+          d="M60 7.5c17.9 0 32.4 13.6 32.4 30.4S77.9 68.3 60 68.3 27.6 54.7 27.6 37.9 42.1 7.5 60 7.5Z"
+          fill={`url(#${globeId})`}
+          stroke="#3b1a0c"
+          strokeWidth="3.2"
+        />
+        <path
+          d="M35.5 36.5c11.5-7.2 25-9.6 40.5-7.1M31.8 48.3c12.2 4.6 28.8 5.4 49.8 2.2M59.1 9.8c-6.7 13.6-7.5 32.4-2.5 56.3M73.7 15.8C61.6 28 56.1 44.7 57.2 65.9"
+          stroke="#4b210f"
+          strokeLinecap="round"
+          strokeOpacity="0.72"
+          strokeWidth="2.4"
+        />
+        <path
+          d="M42.5 14.6c6.4 2.2 13.1 2.4 20.2 0.5-2.6 6.9-8.1 9.7-16.5 8.6 3.1 4 8.3 5.7 15.4 5-7.9 4.9-16.1 5-24.5 0.3 0.9-5.9 2.7-10.7 5.4-14.4Z"
+          fill="#3f1b0d"
+          opacity="0.88"
+        />
+        <path
+          d="M86.5 24.7c-5.5 5-11.3 7.8-17.4 8.4 7.1 3 13.1 3 18.1-0.1-4.2 7.5-10.7 11.3-19.3 11.3 6 2.9 12.2 3.2 18.7 0.9-3.2 7.1-8.4 12.1-15.6 15.1C82.7 55 89.1 46.4 90.2 34.7c-0.2-3.6-1.4-6.9-3.7-10Z"
+          fill="#3f1b0d"
+          opacity="0.82"
+        />
+        <path
+          d="M24.2 46.5c1.5 15 8.3 26.9 20.3 35.6 8.4 6.1 12.6 13.8 12.6 23.1-17.5-8.1-30-21.5-37.4-40.3-3.1-7.8-1.6-13.9 4.5-18.4Z"
+          fill={`url(#${cupId})`}
+          stroke="#3b1a0c"
+          strokeLinejoin="round"
+          strokeWidth="3"
+        />
+        <path
+          d="M95.8 46.5c-1.5 15-8.3 26.9-20.3 35.6-8.4 6.1-12.6 13.8-12.6 23.1 17.5-8.1 30-21.5 37.4-40.3 3.1-7.8 1.6-13.9-4.5-18.4Z"
+          fill={`url(#${cupId})`}
+          stroke="#3b1a0c"
+          strokeLinejoin="round"
+          strokeWidth="3"
+        />
+        <path
+          d="M34.1 62.6c7.9 7.4 16.5 11.2 25.9 11.2s18-3.8 25.9-11.2"
+          stroke="#3b1a0c"
+          strokeLinecap="round"
+          strokeWidth="5.2"
+        />
+        <path
+          d="M45 45.7c5.5 13 9.4 31.2 11.7 54.7-11.4-12-18.9-26.8-22.5-44.3 3.7-4.4 7.3-7.9 10.8-10.4Z"
+          fill="#fff0bc"
+          opacity="0.82"
+        />
+        <path
+          d="M75 45.7c-5.5 13-9.4 31.2-11.7 54.7 11.4-12 18.9-26.8 22.5-44.3-3.7-4.4-7.3-7.9-10.8-10.4Z"
+          fill={`url(#${darkId})`}
+          opacity="0.92"
+        />
+        <path
+          d="M53.2 44.4c7.5 18.8 10.8 39.8 9.8 63-11.5-14.2-16.5-31.6-14.8-52.1 1.1-4.4 2.8-8 5-10.9Z"
+          fill={`url(#${cupId})`}
+          stroke="#3b1a0c"
+          strokeLinejoin="round"
+          strokeWidth="2.6"
+        />
+        <path
+          d="M23.2 48.2c-3.7 2.3-5.3 6.1-4.7 11.5 1.2 9.5 8.9 15.4 23 17.6M96.8 48.2c3.7 2.3 5.3 6.1 4.7 11.5-1.2 9.5-8.9 15.4-23 17.6"
+          stroke="#3b1a0c"
+          strokeLinecap="round"
+          strokeWidth="3"
+        />
+        <path
+          d="M38.8 55.4c2.3 13.7 8.4 24 18.3 31M33.4 67.5c4.4 8.9 11.4 16.5 21 22.8"
+          stroke="#fff4c8"
+          strokeLinecap="round"
+          strokeOpacity="0.72"
+          strokeWidth="3"
+        />
+        <circle cx="75.4" cy="55.8" r="5.5" fill="#d59a46" stroke="#3b1a0c" strokeWidth="2.4" />
+        <path
+          d="M42.8 95.6h34.4l4.5 11.5H38.3l4.5-11.5Z"
+          fill={`url(#${baseId})`}
+          stroke="#3b1a0c"
+          strokeLinejoin="round"
+          strokeWidth="2.8"
+        />
+        <path
+          d="M34.5 106.7h51l5.2 8H29.3l5.2-8Z"
+          fill="#146d5c"
+          stroke="#3b1a0c"
+          strokeLinejoin="round"
+          strokeWidth="2.8"
+        />
+        <path d="M39.4 107.2h7.2v6.5h-7.2zM53.2 107.2h7.2v6.5h-7.2zM67 107.2h7.2v6.5H67z" fill="#f1cb82" />
+        <path
+          d="M36.6 21.7c5.9-6.6 13.5-10 22.7-10.1M36.8 33.8c3.1-4.9 7.6-8 13.5-9.3"
+          stroke="#fff1bd"
+          strokeLinecap="round"
+          strokeOpacity="0.74"
+          strokeWidth="3.2"
+        />
+        <path
+          d="M25.8 50.5c4.7 8.7 12.2 15.2 22.5 19.5M52.2 48.2c4.2 13.1 6.5 26 6.8 38.7"
+          stroke="#3b1a0c"
+          strokeLinecap="round"
+          strokeOpacity="0.38"
+          strokeWidth="3.2"
+        />
+      </g>
+    </svg>
+  );
+}
+
 function MatchCard({ match, teams }: { match: BracketMatch; teams: Team[] }) {
   const position = getMatchPosition(match);
   const kickoff = formatKnockoutKickoff(match.kickoff);
+  const desktopDate = formatKnockoutDesktopDate(match.kickoff);
   const finished = isFinished(match.statusShort);
+  const matchMeta = finished ? getMatchScoreLabel(match) : desktopDate.label;
   const loser = getLoser(match);
   const style = {
     left: position.x,
@@ -814,7 +1021,7 @@ function MatchCard({ match, teams }: { match: BracketMatch; teams: Team[] }) {
 
   return (
     <article
-      aria-label={`${match.round}: ${match.homeTeam} vs ${match.awayTeam}, ${finished ? `${match.homeScore}-${match.awayScore}` : kickoff.label.replace("\n", " ")}`}
+      aria-label={`${match.round}: ${match.homeTeam} vs ${match.awayTeam}, ${matchMeta}`}
       className={`knockout-card${match.badge ? " knockout-card-featured" : ""}${finished ? " knockout-card-finished" : ""}`}
       data-badge={match.badge}
       style={style}
@@ -828,22 +1035,25 @@ function MatchCard({ match, teams }: { match: BracketMatch; teams: Team[] }) {
         <KnockoutTeamName teams={teams} value={match.awayTeam} loser={loser === "away"} />
       </div>
       {finished ? (
-        <div className="knockout-card-score">
-          <span>{match.homeScore}</span>
-          <span className="knockout-card-score-sep">–</span>
-          <span>{match.awayScore}</span>
-        </div>
+        <MatchScore match={match} />
       ) : (
-        <time className="knockout-card-date" dateTime={kickoff.dateTime}>{kickoff.label}</time>
+        <time className="knockout-card-date" dateTime={desktopDate.dateTime}>{desktopDate.label}</time>
       )}
       {match.badge ? <span className="knockout-card-badge">{match.badge}</span> : null}
     </article>
   );
 }
 
-function MobileBracketMatchCard({ match, teams }: { match: MobilePositionedMatch; teams: Team[] }) {
+const MobileBracketMatchCard = memo(function MobileBracketMatchCard({
+  match,
+  teams,
+}: {
+  match: MobilePositionedMatch;
+  teams: Team[];
+}) {
   const kickoff = formatKnockoutKickoff(match.kickoff);
   const finished = isFinished(match.statusShort);
+  const matchMeta = finished ? getMatchScoreLabel(match) : kickoff.label.replace("\n", " ");
   const loser = getLoser(match);
   const style = {
     "--knockout-mobile-card-height": `${match.height}px`,
@@ -855,7 +1065,7 @@ function MobileBracketMatchCard({ match, teams }: { match: MobilePositionedMatch
 
   return (
     <article
-      aria-label={`${match.round}: ${match.homeTeam} vs ${match.awayTeam}, ${finished ? `${match.homeScore}-${match.awayScore}` : kickoff.label.replace("\n", " ")}`}
+      aria-label={`${match.round}: ${match.homeTeam} vs ${match.awayTeam}, ${matchMeta}`}
       className={`knockout-mobile-bracket-card${match.badge === "FINAL" ? " knockout-mobile-bracket-final" : ""}${finished ? " knockout-card-finished" : ""}`}
       data-badge={match.badge}
       data-round-index={match.roundIndex}
@@ -869,7 +1079,7 @@ function MobileBracketMatchCard({ match, teams }: { match: MobilePositionedMatch
               <KnockoutTeamName mobile teams={teams} value={match.homeTeam} loser={loser === "home"} />
             </div>
             <div className="knockout-mobile-final-trophy" aria-hidden="true">
-              <Trophy size={64} strokeWidth={1.35} />
+              <ChampionTrophy className="knockout-mobile-final-trophy-icon" mobileOptimized />
             </div>
             <div className="knockout-mobile-final-contender">
               <KnockoutCrest teams={teams} value={match.awayTeam} faded={loser === "away"} />
@@ -879,11 +1089,7 @@ function MobileBracketMatchCard({ match, teams }: { match: MobilePositionedMatch
           <div className="knockout-mobile-final-meta">
             <strong>{match.venue}</strong>
             {finished ? (
-              <div className="knockout-card-score knockout-card-score-final">
-                <span>{match.homeScore}</span>
-                <span className="knockout-card-score-sep">–</span>
-                <span>{match.awayScore}</span>
-              </div>
+              <MatchScore final match={match} />
             ) : (
               <time dateTime={kickoff.dateTime}>{kickoff.label.replace("\n", ", ")}</time>
             )}
@@ -910,11 +1116,7 @@ function MobileBracketMatchCard({ match, teams }: { match: MobilePositionedMatch
               </div>
             </div>
             {finished ? (
-              <div className="knockout-card-score">
-                <span>{match.homeScore}</span>
-                <span className="knockout-card-score-sep">–</span>
-                <span>{match.awayScore}</span>
-              </div>
+              <MatchScore match={match} />
             ) : (
               <time dateTime={kickoff.dateTime}>{kickoff.label}</time>
             )}
@@ -922,6 +1124,155 @@ function MobileBracketMatchCard({ match, teams }: { match: MobilePositionedMatch
         </>
       )}
     </article>
+  );
+}, (previous, next) => {
+  const previousMatch = previous.match;
+  const nextMatch = next.match;
+
+  return (
+    previous.teams === next.teams &&
+    previousMatch.id === nextMatch.id &&
+    previousMatch.round === nextMatch.round &&
+    previousMatch.homeTeam === nextMatch.homeTeam &&
+    previousMatch.awayTeam === nextMatch.awayTeam &&
+    previousMatch.homeScore === nextMatch.homeScore &&
+    previousMatch.awayScore === nextMatch.awayScore &&
+    previousMatch.penaltyHomeScore === nextMatch.penaltyHomeScore &&
+    previousMatch.penaltyAwayScore === nextMatch.penaltyAwayScore &&
+    previousMatch.statusShort === nextMatch.statusShort &&
+    previousMatch.kickoff === nextMatch.kickoff &&
+    previousMatch.venue === nextMatch.venue &&
+    previousMatch.badge === nextMatch.badge &&
+    previousMatch.roundIndex === nextMatch.roundIndex &&
+    previousMatch.height === nextMatch.height &&
+    previousMatch.opacity === nextMatch.opacity &&
+    previousMatch.width === nextMatch.width &&
+    previousMatch.x === nextMatch.x &&
+    previousMatch.y === nextMatch.y
+  );
+});
+
+const KnockoutOverviewMatchCard = memo(function KnockoutOverviewMatchCard({
+  match,
+  teams,
+}: {
+  match: OverviewPositionedMatch;
+  teams: Team[];
+}) {
+  const finished = isFinished(match.statusShort);
+  const loser = getLoser(match);
+  const homeTeam = resolveKnockoutTeam(match.homeTeam, teams);
+  const awayTeam = resolveKnockoutTeam(match.awayTeam, teams);
+  const date = formatKnockoutDesktopDate(match.kickoff);
+
+  return (
+    <article
+      aria-label={`${match.round}: ${homeTeam.label} vs ${awayTeam.label}, ${
+        finished ? getMatchScoreLabel(match) : date.label
+      }`}
+      className={`knockout-overview-card${finished ? " knockout-card-finished" : ""}`}
+      data-badge={match.badge}
+      style={{
+        height: `${match.height}px`,
+        transform: `translate3d(${match.x}px, ${match.y}px, 0)`,
+        width: `${match.width}px`,
+      }}
+    >
+      <div className="knockout-overview-card-body">
+        <div className="knockout-overview-teams">
+          <div className={`knockout-overview-team${loser === "home" ? " knockout-team-loser" : ""}`}>
+            <KnockoutCrest teams={teams} value={match.homeTeam} faded={loser === "home"} />
+            <span className="knockout-team-label">{homeTeam.label}</span>
+            {finished ? <strong>{match.homeScore}</strong> : null}
+          </div>
+          <div className={`knockout-overview-team${loser === "away" ? " knockout-team-loser" : ""}`}>
+            <KnockoutCrest teams={teams} value={match.awayTeam} faded={loser === "away"} />
+            <span className="knockout-team-label">{awayTeam.label}</span>
+            {finished ? <strong>{match.awayScore}</strong> : null}
+          </div>
+        </div>
+        {!finished ? (
+          <time className="knockout-overview-date-side" dateTime={date.dateTime}>
+            {date.label}
+          </time>
+        ) : null}
+      </div>
+      {finished && match.statusShort === "PEN" && match.penaltyHomeScore != null && match.penaltyAwayScore != null ? (
+        <small className="knockout-overview-penalties">
+          Pens {match.penaltyHomeScore}-{match.penaltyAwayScore}
+        </small>
+      ) : null}
+      {match.badge ? <span className="knockout-overview-badge">{match.badge}</span> : null}
+    </article>
+  );
+});
+
+function KnockoutOverview({
+  rounds,
+  teams,
+  width,
+}: {
+  rounds: KnockoutRound[];
+  teams: Team[];
+  width: number;
+}) {
+  const layout = useMemo(
+    () => getKnockoutOverviewLayout(rounds, width || 320),
+    [rounds, width],
+  );
+
+  return (
+    <div
+      aria-label="World Cup knockout overview"
+      className="knockout-overview-scroll"
+      data-tab-swipe-ignore="true"
+      role="region"
+    >
+      <div
+        className="knockout-overview-board"
+        style={{
+          height: `${layout.height}px`,
+          width: `${layout.width}px`,
+        }}
+      >
+        <svg
+          aria-hidden="true"
+          className="knockout-overview-connectors"
+          focusable="false"
+          viewBox={`0 0 ${layout.width} ${layout.height}`}
+        >
+          {layout.connectors.map((connector) => (
+            <path
+              d={connector.d}
+              key={`${connector.sourceId}-${connector.targetId}`}
+            />
+          ))}
+        </svg>
+
+        {layout.matches.map((match) => (
+          <KnockoutOverviewMatchCard
+            key={`overview-${match.id}`}
+            match={match}
+            teams={teams}
+          />
+        ))}
+
+        <div
+          aria-hidden="true"
+          className="knockout-overview-champion"
+          style={{
+            left: `${layout.champion.x}px`,
+            top: `${layout.champion.y}px`,
+          }}
+        >
+          <ChampionTrophy
+            className="knockout-overview-trophy"
+            mobileOptimized
+          />
+          <strong>CHAMPION</strong>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -934,6 +1285,7 @@ export function KnockoutTab({
   rounds: KnockoutRound[];
   teams: Team[];
 }) {
+  const [mobileViewMode, setMobileViewMode] = useState<"detail" | "overview">("detail");
   const [activeMobileRound, setActiveMobileRound] = useState("");
   const [mobileScrollLeft, setMobileScrollLeft] = useState(0);
   const [mobileViewportWidth, setMobileViewportWidth] = useState(0);
@@ -942,6 +1294,7 @@ export function KnockoutTab({
   const [boardScale, setBoardScale] = useState(1);
   const mobileRoundButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const mobileTouchStartRef = useRef<MobileTouchStart | null>(null);
+  const mobileAfterVerticalRef = useRef(false);
   const mobileSnapTargetRef = useRef<MobileSnapTarget | null>(null);
   const mobileSnapAnimationFrameRef = useRef<number | null>(null);
   const mobileScrollFrameRef = useRef<number | null>(null);
@@ -1015,6 +1368,39 @@ export function KnockoutTab({
     window.addEventListener("resize", updateMobileViewportWidth);
     return () => window.removeEventListener("resize", updateMobileViewportWidth);
   }, []);
+
+  useEffect(() => {
+    if (mobileViewMode === "overview") {
+      if (mobileScrollFrameRef.current !== null) {
+        cancelAnimationFrame(mobileScrollFrameRef.current);
+        mobileScrollFrameRef.current = null;
+      }
+      if (mobileSnapAnimationFrameRef.current !== null) {
+        cancelAnimationFrame(mobileSnapAnimationFrameRef.current);
+        mobileSnapAnimationFrameRef.current = null;
+      }
+      mobileTouchStartRef.current = null;
+      mobileAfterVerticalRef.current = false;
+      mobileSnapTargetRef.current = null;
+      return;
+    }
+
+    const scroller = mobileBoardScrollRef.current;
+    const roundIndex = Math.max(
+      0,
+      rounds.findIndex((round) => round.round === activeMobileRound),
+    );
+    const restoredScrollLeft = getMobileRoundScrollLeft(
+      mobileLayout.roundOffsets,
+      roundIndex,
+    );
+
+    if (scroller) {
+      scroller.scrollLeft = 0;
+    }
+    latestMobileScrollLeftRef.current = restoredScrollLeft;
+    setMobileScrollLeft(restoredScrollLeft);
+  }, [mobileViewMode]);
 
   const selectedMobileRound = rounds.find((round) => round.round === activeMobileRound) ?? rounds[0];
   const settleMobileRound = (roundIndex: number) => {
@@ -1119,49 +1505,20 @@ export function KnockoutTab({
   };
 
   const handleMobileBracketScroll = (scroller: HTMLDivElement) => {
-    const scrollLeft = latestMobileScrollLeftRef.current;
-    const touching = mobileTouchStartRef.current;
+    const rawScrollLeft = scroller.scrollLeft;
 
-    if (touching) {
-      return;
-    }
-
-    const shouldThrottle = mobileSnapTargetRef.current !== null;
-
-    if (shouldThrottle) {
-      scheduleMobileScrollUpdate(scrollLeft);
-    } else {
-      setMobileScrollLeft(scrollLeft);
-    }
-
-    const targetRoundIndex =
-      mobileSnapTargetRef.current?.roundIndex ??
-      getClosestMobileRoundIndex(
-        mobileLayout.roundOffsets,
-        getMobileViewportAnchor(scrollLeft),
-      );
-    const targetScrollLeft = getMobileRoundScrollLeft(
-      mobileLayout.roundOffsets,
-      targetRoundIndex,
-    );
-
-    if (Math.abs(scrollLeft - targetScrollLeft) <= 1) {
-
-      if (mobileScrollFrameRef.current !== null) {
-        cancelAnimationFrame(mobileScrollFrameRef.current);
-        mobileScrollFrameRef.current = null;
-      }
-      latestMobileScrollLeftRef.current = targetScrollLeft;
-      setMobileScrollLeft(targetScrollLeft);
-      settleMobileRound(targetRoundIndex);
-    }
+    // This element owns vertical scrolling only. Horizontal bracket position is
+    // logical state rendered by the board transform, never native scrollLeft.
+    if (rawScrollLeft !== 0) scroller.scrollLeft = 0;
   };
 
   const handleMobileBracketTouchStart = (event: TouchEvent<HTMLDivElement>) => {
     event.stopPropagation();
 
+    mobileAfterVerticalRef.current = false;
     cancelMobileSnapAnimation();
     const scrollLeft = latestMobileScrollLeftRef.current;
+    latestMobileScrollLeftRef.current = scrollLeft;
     const touch = event.touches[0];
     const roundIndex = getClosestMobileRoundIndex(
       mobileLayout.roundOffsets,
@@ -1227,7 +1584,6 @@ export function KnockoutTab({
       Math.max(0, gestureStart.scrollLeft + horizontalDelta),
     );
 
-
     scheduleMobileScrollUpdate(nextScrollLeft);
   };
 
@@ -1270,9 +1626,9 @@ export function KnockoutTab({
         gestureStart.roundIndex,
       );
 
+      mobileAfterVerticalRef.current = true;
       latestMobileScrollLeftRef.current = targetScrollLeft;
       setMobileScrollLeft(targetScrollLeft);
-      settleMobileRound(gestureStart.roundIndex);
       return;
     }
 
@@ -1295,19 +1651,6 @@ export function KnockoutTab({
 
     const nextRoundIndex = Math.min(rounds.length - 1, Math.max(0, targetRoundIndex));
 
-    if (
-      nextRoundIndex === rounds.length - 1 &&
-      targetRoundIndex > rounds.length - 1 &&
-      allowFastForward &&
-      onFastForwardSwipe
-    ) {
-      mobileSnapTargetRef.current = null;
-      onFastForwardSwipe();
-      return;
-    }
-
-
-
     snapToMobileRound(
       nextRoundIndex,
       nextRoundIndex === gestureStart.roundIndex ? event.currentTarget.scrollTop : 0,
@@ -1328,7 +1671,6 @@ export function KnockoutTab({
 
   return (
     <div className="knockout-shell">
-
       <div
         className="knockout-board-scroll"
         ref={boardScrollRef}
@@ -1340,8 +1682,8 @@ export function KnockoutTab({
           style={{
             "--knockout-board-width": `${board.width}px`,
             "--knockout-board-height": `${board.height}px`,
-            transform: boardScale < 1 ? `scale(${boardScale})` : undefined,
-            transformOrigin: "top left",
+            transform: `translateX(-50%) scale(${boardScale})`,
+            transformOrigin: "top center",
           } as CSSProperties}
         >
           <svg
@@ -1356,8 +1698,7 @@ export function KnockoutTab({
           </svg>
 
           <div className="knockout-champion-node" aria-hidden="true">
-            <Trophy size={82} strokeWidth={1.45} />
-            <span className="knockout-champion-help">?</span>
+            <ChampionTrophy className="knockout-champion-trophy" />
             <strong>CHAMPION</strong>
           </div>
 
@@ -1368,6 +1709,7 @@ export function KnockoutTab({
       </div>
 
       <section className="knockout-mobile" aria-label="World Cup knockout rounds">
+        {mobileViewMode === "detail" ? <>
         <div className="knockout-round-strip" role="tablist" aria-label="Knockout rounds">
           {rounds.map((round, roundIndex) => {
             const selectionProgress = getRoundSelectionProgress(
@@ -1411,12 +1753,20 @@ export function KnockoutTab({
           onTouchStart={handleMobileBracketTouchStart}
         >
           <div
+            className="knockout-mobile-bracket-viewport"
+            style={
+              {
+                  "--knockout-mobile-board-height": `${mobileLayout.height}px`,
+                } as CSSProperties
+            }
+          >
+          <div
             className="knockout-mobile-bracket-board"
             style={
               {
                 "--knockout-mobile-board-height": `${mobileLayout.height}px`,
                 "--knockout-mobile-board-width": `${mobileLayout.width}px`,
-                transform: `translateX(-${mobileScrollLeft}px)`,
+                transform: `translate3d(-${mobileScrollLeft}px, 0, 0)`,
               } as CSSProperties
             }
           >
@@ -1445,7 +1795,42 @@ export function KnockoutTab({
               />
             ))}
           </div>
+          </div>
         </div>
+        </> : (
+          <KnockoutOverview
+            rounds={rounds}
+            teams={teams}
+            width={mobileViewportWidth}
+          />
+        )}
+
+        <button
+          aria-label={
+            mobileViewMode === "detail"
+              ? "Show full bracket overview"
+              : "Show round detail"
+          }
+          aria-pressed={mobileViewMode === "overview"}
+          className="knockout-mobile-view-toggle"
+          onClick={() =>
+            setMobileViewMode((currentMode) =>
+              currentMode === "detail" ? "overview" : "detail",
+            )
+          }
+          title={
+            mobileViewMode === "detail"
+              ? "Show full bracket overview"
+              : "Show round detail"
+          }
+          type="button"
+        >
+          {mobileViewMode === "detail" ? (
+            <Network aria-hidden="true" />
+          ) : (
+            <Rows3 aria-hidden="true" />
+          )}
+        </button>
       </section>
     </div>
   );
