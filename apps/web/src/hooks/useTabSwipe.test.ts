@@ -565,6 +565,32 @@ describe("resolveSwipeDelta", () => {
     ).toBe(0);
   });
 
+  test("stays on the current tab after a slow 17 percent swipe", () => {
+    expect(
+      resolveSwipeDelta({
+        activeIndex: 1,
+        distanceX: -170,
+        distanceY: 4,
+        elapsedMs: 1000,
+        tabCount: 4,
+        viewportWidth: 1000,
+      }),
+    ).toBe(0);
+  });
+
+  test("moves one tab after a slow 18 percent swipe", () => {
+    expect(
+      resolveSwipeDelta({
+        activeIndex: 1,
+        distanceX: -180,
+        distanceY: 4,
+        elapsedMs: 1000,
+        tabCount: 4,
+        viewportWidth: 1000,
+      }),
+    ).toBe(1);
+  });
+
   test("stays on the current tab after a short quick flick", () => {
     expect(
       resolveSwipeDelta({

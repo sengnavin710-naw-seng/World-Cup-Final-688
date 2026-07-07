@@ -160,6 +160,29 @@ test("moves the board with the finger and snaps one adjacent round", () => {
   expect(scroller.scrollLeft).toBe(0);
 });
 
+test("hands a forward swipe from Finals to Fixtures", () => {
+  const clock = installAnimationFrameClock();
+  const onFastForwardSwipe = vi.fn();
+  render(
+    <KnockoutTab
+      onFastForwardSwipe={onFastForwardSwipe}
+      rounds={rounds}
+      teams={[]}
+    />,
+  );
+  const { scroller } = getMobileElements();
+  fireEvent.click(screen.getByRole("tab", { name: "Finals" }));
+  clock.finish();
+
+  fireEvent.touchStart(scroller, { touches: [{ clientX: 220, clientY: 300 }] });
+  fireEvent.touchMove(scroller, { touches: [{ clientX: 120, clientY: 302 }] });
+  clock.advance(0);
+  fireEvent.touchEnd(scroller, { changedTouches: [{ clientX: 120, clientY: 302 }] });
+
+  expect(onFastForwardSwipe).toHaveBeenCalledTimes(1);
+  expect(scroller.scrollLeft).toBe(0);
+});
+
 test("keeps the selected horizontal anchor during vertical scrolling and rubber-band drift", () => {
   const clock = installAnimationFrameClock();
   render(<KnockoutTab rounds={rounds} teams={[]} />);
@@ -220,6 +243,14 @@ test("overview updates its score from current round props", () => {
   const overview = screen.getByLabelText("World Cup knockout overview");
   expect(overview).toHaveTextContent("2");
   expect(overview).toHaveTextContent("1");
+});
+
+test("lets AppShell own horizontal swipes in overview", () => {
+  render(<KnockoutTab rounds={rounds} teams={[]} />);
+  fireEvent.click(screen.getByRole("button", { name: "Show full bracket overview" }));
+  expect(screen.getByLabelText("World Cup knockout overview")).not.toHaveAttribute(
+    "data-tab-swipe-ignore",
+  );
 });
 
 test("renders future overview dates beside teams in rounded cards", () => {

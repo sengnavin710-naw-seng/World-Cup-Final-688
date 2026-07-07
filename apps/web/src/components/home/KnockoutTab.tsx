@@ -1225,7 +1225,6 @@ function KnockoutOverview({
     <div
       aria-label="World Cup knockout overview"
       className="knockout-overview-scroll"
-      data-tab-swipe-ignore="true"
       role="region"
     >
       <div
@@ -1629,6 +1628,17 @@ export function KnockoutTab({
       mobileAfterVerticalRef.current = true;
       latestMobileScrollLeftRef.current = targetScrollLeft;
       setMobileScrollLeft(targetScrollLeft);
+      return;
+    }
+
+    if (
+      horizontalDelta >= mobileRoundSnapThreshold &&
+      gestureStart.roundIndex === rounds.length - 1 &&
+      allowFastForward &&
+      onFastForwardSwipe
+    ) {
+      mobileSnapTargetRef.current = null;
+      onFastForwardSwipe();
       return;
     }
 
