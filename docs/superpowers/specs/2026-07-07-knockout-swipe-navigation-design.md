@@ -24,10 +24,18 @@ Make horizontal navigation predictable at the edge of the Knockout bracket and i
 
 `KnockoutTab` continues to use `onFastForwardSwipe` for the Detail-mode boundary handoff. Overview mode delegates horizontal gestures to `useTabSwipe` by removing its swipe-ignore marker and avoiding local horizontal touch interception.
 
+## Shared tab swipe sensitivity
+
+- A slow horizontal gesture commits tab navigation after crossing 18% of the viewport width, reduced from 28%.
+- A gesture below 18% settles back unless it independently satisfies the existing fast-swipe velocity rule.
+- The existing horizontal-intent ratio remains unchanged so diagonal and vertical gestures do not become easier to misclassify.
+- The threshold applies consistently to every AppShell tab, including Knockout Overview.
+
 ## Tests
 
 - Detail mode calls the tab-navigation callback after a forward swipe from settled Finals.
 - Detail mode still advances exactly one round before Finals.
 - Overview does not carry the swipe-ignore marker.
 - Shared tab-swipe tests verify horizontal navigation from Overview and vertical gesture rejection.
+- Shared resolver boundary tests verify that a slow 17% swipe settles back and a slow 18% swipe changes tab.
 - Existing axis-lock, mode restore, and production build checks remain green.
