@@ -1,5 +1,6 @@
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { vi } from "vitest";
 import type { Fixture } from "../../lib/types";
 import { FixturesTab } from "./FixturesTab";
 
@@ -184,7 +185,8 @@ test("shows a real score and match status for completed API fixtures", () => {
   );
 });
 
-test("shows elapsed time for a live API fixture", () => {
+test("shows a ticking clock and announced stoppage time for a live API fixture", () => {
+  vi.useFakeTimers();
   render(
     <FixturesTab
       companyPicks={[]}
@@ -195,6 +197,7 @@ test("shows elapsed time for a live API fixture", () => {
           homeScore: 2,
           kickoff: "2026-06-11T19:00:00+00:00",
           statusElapsed: 67,
+          statusExtra: 6,
           statusLong: "Second Half",
           statusShort: "2H",
         },
@@ -204,5 +207,10 @@ test("shows elapsed time for a live API fixture", () => {
   );
 
   expect(screen.getByText("2 - 1")).toBeInTheDocument();
-  expect(screen.getByText("67'")).toBeInTheDocument();
+  expect(screen.getByText("67:00 +6")).toBeInTheDocument();
+
+  act(() => vi.advanceTimersByTime(1_000));
+
+  expect(screen.getByText("67:01 +6")).toBeInTheDocument();
+  vi.useRealTimers();
 });

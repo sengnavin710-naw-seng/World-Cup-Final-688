@@ -61,6 +61,7 @@ export type Fixture = {
   penaltyHomeScore?: number | null;
   penaltyAwayScore?: number | null;
   statusElapsed?: number | null;
+  statusExtra?: number | null;
   statusLong?: string;
   statusShort?: string;
 };

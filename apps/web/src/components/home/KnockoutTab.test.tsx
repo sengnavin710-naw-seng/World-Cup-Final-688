@@ -4,7 +4,10 @@ import { readFileSync } from "node:fs";
 import type { KnockoutRound, Team } from "../../lib/types";
 import { KnockoutTab } from "./KnockoutTab";
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 function installAnimationFrameClock() {
   let nextId = 1;
@@ -102,8 +105,64 @@ test("renders resolved owners and keeps unresolved placeholders plain", () => {
     matches: [{ ...makeMatch(73, "Owner", 1), homeTeam: "ARG", awayTeam: "Winner Match 1" }],
   }];
   render(<KnockoutTab rounds={ownerRounds} teams={teams} />);
-  expect(screen.getAllByText("မင်း").length).toBeGreaterThan(0);
+  const desktopOwner = screen
+    .getAllByText("မင်း")
+    .find((node) => node.closest(".knockout-card"));
+  expect(desktopOwner).toHaveAttribute("title", "မင်း");
+  expect(screen.queryByText("Owner: မင်း")).not.toBeInTheDocument();
   expect(screen.getAllByText("Winner Match 1").length).toBeGreaterThan(0);
+});
+
+test("shows desktop owner names in wider cards with ellipsis overflow", () => {
+  const styles = readFileSync("src/styles.css", "utf8");
+  expect(styles).toMatch(
+    /\.knockout-card\s*\{[^}]*width:\s*120px;[^}]*height:\s*90px;/s,
+  );
+  expect(styles).toMatch(
+    /\.knockout-card \.knockout-owner-name\s*\{[^}]*display:\s*block;[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/s,
+  );
+});
+
+test("places the desktop final badges fully below the match date", () => {
+  const styles = readFileSync("src/styles.css", "utf8");
+  expect(styles).toMatch(
+    /\.knockout-card-badge\s*\{[^}]*top:\s*calc\(100%\s*\+\s*4px\);[^}]*bottom:\s*auto;/s,
+  );
+});
+
+test("keeps at least 30px between the desktop semi-final cards and final", () => {
+  const finalStageRounds: KnockoutRound[] = [
+    {
+      round: "Semi-finals",
+      matches: [
+        { ...makeMatch(101, "SF", 1, "left"), bracketColumn: 4, bracketSlot: 1 },
+        { ...makeMatch(102, "SF", 2, "right"), bracketColumn: 4, bracketSlot: 1 },
+      ],
+    },
+    {
+      round: "Finals",
+      matches: [{ ...makeMatch(104, "Final", 1, "center"), badge: "FINAL" }],
+    },
+  ];
+  render(<KnockoutTab rounds={finalStageRounds} teams={[]} />);
+
+  const desktopBracket = screen.getByLabelText("World Cup knockout bracket");
+  const cards = Array.from(desktopBracket.querySelectorAll<HTMLElement>(".knockout-card"));
+  const findCard = (labelStart: string) => cards.find((card) =>
+    card.getAttribute("aria-label")?.startsWith(labelStart));
+  const leftSemi = findCard("Semi-finals: SF Home 1 vs SF Away 1");
+  const rightSemi = findCard("Semi-finals: SF Home 2 vs SF Away 2");
+  const final = findCard("Finals: Final Home 1 vs Final Away 1");
+  if (!leftSemi || !rightSemi || !final) throw new Error("Expected desktop final-stage cards");
+  const cardWidth = 120;
+
+  const leftGap = Number.parseFloat(final.style.left) -
+    (Number.parseFloat(leftSemi.style.left) + cardWidth);
+  const rightGap = Number.parseFloat(rightSemi.style.left) -
+    (Number.parseFloat(final.style.left) + cardWidth);
+
+  expect(leftGap).toBeGreaterThanOrEqual(30);
+  expect(rightGap).toBeGreaterThanOrEqual(30);
 });
 
 test("shows finished scores and penalty detail", () => {
@@ -243,6 +302,44 @@ test("overview updates its score from current round props", () => {
   const overview = screen.getByLabelText("World Cup knockout overview");
   expect(overview).toHaveTextContent("2");
   expect(overview).toHaveTextContent("1");
+});
+
+test("remeasures the overview board when its tablet container resizes", () => {
+  let overviewResize: ResizeObserverCallback | undefined;
+
+  vi.stubGlobal("ResizeObserver", class {
+    private readonly callback: ResizeObserverCallback;
+
+    constructor(callback: ResizeObserverCallback) {
+      this.callback = callback;
+    }
+
+    disconnect() {}
+
+    observe(target: Element) {
+      if (target.classList.contains("knockout-overview-scroll")) {
+        overviewResize = this.callback;
+      }
+    }
+
+    unobserve() {}
+  });
+
+  render(<KnockoutTab rounds={rounds} teams={[]} />);
+  fireEvent.click(screen.getByRole("button", { name: "Show full bracket overview" }));
+  const overview = screen.getByLabelText("World Cup knockout overview");
+  const board = overview.querySelector<HTMLElement>(".knockout-overview-board");
+  if (!board) throw new Error("Expected overview board");
+
+  expect(overviewResize).toBeTypeOf("function");
+  act(() => {
+    overviewResize?.([
+      { contentRect: { width: 820 } } as ResizeObserverEntry,
+    ], {} as ResizeObserver);
+  });
+
+  expect(board).toHaveStyle({ width: "820px" });
+  expect(overview.querySelector("svg")).toHaveAttribute("viewBox", expect.stringMatching(/^0 0 820 /));
 });
 
 test("lets AppShell own horizontal swipes in overview", () => {

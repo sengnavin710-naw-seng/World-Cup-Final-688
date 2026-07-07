@@ -58,7 +58,7 @@ test("preserves scores and live status from API-Football fixtures", () => {
       fixture: {
         id: 1002,
         date: "2026-06-11T19:00:00+00:00",
-        status: { elapsed: 67, long: "Second Half", short: "2H" },
+        status: { elapsed: 67, extra: 6, long: "Second Half", short: "2H" },
         venue: { name: "Mexico City Stadium" },
       },
       goals: { away: 1, home: 2 },
@@ -75,6 +75,7 @@ test("preserves scores and live status from API-Football fixtures", () => {
     homeScore: 2,
     kickoff: "2026-06-11T19:00:00+00:00",
     statusElapsed: 67,
+    statusExtra: 6,
     statusLong: "Second Half",
     statusShort: "2H",
   });

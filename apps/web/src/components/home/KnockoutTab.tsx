@@ -62,7 +62,7 @@ type ResolvedKnockoutTeam = {
 const board = {
   width: 1424,
   height: 780,
-  cardWidth: 90,
+  cardWidth: 120,
   cardHeight: 90,
 };
 
@@ -74,14 +74,14 @@ const leftColumnX = new Map([
   [1, BOARD_H_PAD],
   [2, BOARD_H_PAD + 203],
   [3, BOARD_H_PAD + 369],
-  [4, BOARD_H_PAD + 535],
+  [4, BOARD_H_PAD + 490],
 ]);
 
 const rightColumnX = new Map([
   [1, board.width - board.cardWidth - BOARD_H_PAD],
   [2, board.width - board.cardWidth - BOARD_H_PAD - 203],
   [3, board.width - board.cardWidth - BOARD_H_PAD - 369],
-  [4, board.width - board.cardWidth - BOARD_H_PAD - 535],
+  [4, board.width - board.cardWidth - BOARD_H_PAD - 490],
 ]);
 
 // pitch = 1050/8 = 131.25 → centers at 65, 196, 327, 458, 589, 720, 851, 982
@@ -376,7 +376,9 @@ function KnockoutTeamName({ mobile, teams, value, loser }: { mobile?: boolean; t
     <span className={`knockout-team-name${loser ? " knockout-team-loser" : ""}`}>
       <span className="knockout-team-label">{displayLabel}</span>
       {resolved.ownerName ? (
-        <small className="knockout-owner-name">{resolved.ownerName}</small>
+        <small className="knockout-owner-name" title={resolved.ownerName}>
+          {resolved.ownerName}
+        </small>
       ) : null}
     </span>
   );
@@ -1216,15 +1218,41 @@ function KnockoutOverview({
   teams: Team[];
   width: number;
 }) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+  const layoutWidth = containerWidth || width || 320;
   const layout = useMemo(
-    () => getKnockoutOverviewLayout(rounds, width || 320),
-    [rounds, width],
+    () => getKnockoutOverviewLayout(rounds, layoutWidth),
+    [layoutWidth, rounds],
   );
+
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+
+    const updateWidth = (nextWidth: number) => {
+      if (nextWidth > 0) {
+        setContainerWidth((currentWidth) =>
+          currentWidth === nextWidth ? currentWidth : nextWidth,
+        );
+      }
+    };
+
+    updateWidth(element.clientWidth);
+    if (typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver((entries) => {
+      updateWidth(entries[0]?.contentRect.width ?? element.clientWidth);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <div
       aria-label="World Cup knockout overview"
       className="knockout-overview-scroll"
+      ref={scrollRef}
       role="region"
     >
       <div

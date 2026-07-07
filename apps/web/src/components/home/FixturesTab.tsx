@@ -1,6 +1,6 @@
 import { Calendar, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { createPortal } from "react-dom";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CompanyPick, Fixture } from "../../lib/types";
 
 export type FixtureFilter = "Date" | "Round" | "My Team" | "Group";
@@ -60,15 +60,40 @@ function formatFixtureDate(value: string, style: "full" | "short") {
 }
 
 const liveStatuses = new Set(["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"]);
+const tickingStatuses = new Set(["1H", "2H", "ET", "LIVE"]);
+
+function formatLiveClock(totalSeconds: number, extra?: number | null) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  return `${minutes}:${seconds}${extra != null && extra > 0 ? ` +${extra}` : ""}`;
+}
+
+function FixtureLiveClock({ elapsed, extra, status }: {
+  elapsed: number;
+  extra?: number | null;
+  status: string;
+}) {
+  const [totalSeconds, setTotalSeconds] = useState(elapsed * 60);
+
+  useEffect(() => {
+    setTotalSeconds(elapsed * 60);
+    if (!tickingStatuses.has(status)) return;
+    const interval = window.setInterval(() => {
+      setTotalSeconds((current) => current + 1);
+    }, 1_000);
+    return () => window.clearInterval(interval);
+  }, [elapsed, status]);
+
+  return <>{formatLiveClock(totalSeconds, extra)}</>;
+}
 
 function getFixtureCenter(fixture: Fixture, kickoffTime: string) {
   const hasScore = fixture.homeScore != null && fixture.awayScore != null;
   if (!hasScore) return { primary: kickoffTime, secondary: "" };
   const status = fixture.statusShort ?? "";
-  const secondary =
-    liveStatuses.has(status) && fixture.statusElapsed != null
-      ? `${fixture.statusElapsed}'`
-      : status;
+  const secondary = liveStatuses.has(status) && fixture.statusElapsed != null
+    ? formatLiveClock(fixture.statusElapsed * 60, fixture.statusExtra)
+    : status;
   return { primary: `${fixture.homeScore} - ${fixture.awayScore}`, secondary };
 }
 
@@ -157,7 +182,15 @@ function FixtureMatchRow({
       <time className="fixture-kickoff-time" dateTime={dateTime}>
         <span>{center.primary}</span>
         {center.secondary ? (
-          <small className={liveStatuses.has(fixture.statusShort ?? "") ? "is-live" : ""}>{center.secondary}</small>
+          <small className={liveStatuses.has(fixture.statusShort ?? "") ? "is-live" : ""}>
+            {liveStatuses.has(fixture.statusShort ?? "") && fixture.statusElapsed != null ? (
+              <FixtureLiveClock
+                elapsed={fixture.statusElapsed}
+                extra={fixture.statusExtra}
+                status={fixture.statusShort ?? ""}
+              />
+            ) : center.secondary}
+          </small>
         ) : null}
       </time>
       <FixtureTeam code={fixture.awayTeam} flag={fixture.awayFlag} name={fixture.awayTeamName}

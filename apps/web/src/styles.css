@@ -677,12 +677,12 @@ button {
 
 .group-cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
 }
 
 .group-cards-grid.table-mode-full {
-  grid-template-columns: repeat(auto-fit, minmax(560px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .group-card {
@@ -1309,7 +1309,7 @@ button {
   display: grid;
   grid-template-rows: 22px 1fr auto;
   justify-items: center;
-  width: 90px;
+  width: 120px;
   height: 90px;
   padding: 8px 9px 7px;
   border: 1px solid #0088cc;
@@ -1386,7 +1386,10 @@ button {
 }
 
 .knockout-card .knockout-owner-name {
-  display: none;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .knockout-owner-name {
@@ -1470,7 +1473,8 @@ button {
 .knockout-card-badge {
   position: absolute;
   left: 50%;
-  bottom: -11px;
+  top: calc(100% + 4px);
+  bottom: auto;
   min-width: 48px;
   transform: translateX(-50%);
   border-radius: 5px;
@@ -2444,6 +2448,13 @@ button {
 
   .tab-local-skeleton span {
     animation: none;
+  }
+}
+
+@media (max-width: 1100px) {
+  .group-cards-grid,
+  .group-cards-grid.table-mode-full {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

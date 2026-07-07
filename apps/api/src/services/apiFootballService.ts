@@ -21,6 +21,7 @@ type ApiFootballFixture = {
     date?: string | null;
     status?: {
       elapsed?: number | null;
+      extra?: number | null;
       long?: string | null;
       short?: string | null;
     } | null;
@@ -254,6 +255,7 @@ export function mapApiFootballFixtures(apiFixtures: ApiFootballFixture[]): Fixtu
       penaltyAwayScore: fixture.score?.penalty?.away ?? null,
       round: normalizeRoundLabel(fixture.league?.round, group),
       statusElapsed: fixture.fixture?.status?.elapsed ?? null,
+      statusExtra: fixture.fixture?.status?.extra ?? null,
       statusLong: fixture.fixture?.status?.long ?? "",
       statusShort: fixture.fixture?.status?.short ?? "",
       venue: fixture.fixture?.venue?.name ?? "",

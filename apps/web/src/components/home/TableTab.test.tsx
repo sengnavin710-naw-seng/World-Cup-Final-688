@@ -91,7 +91,20 @@ test("keeps full table team names readable at small and large widths", () => {
     /\.table-team-name\s*\{[\s\S]*?white-space:\s*nowrap;/,
   );
   expect(applicationStyles).toMatch(
-    /\.group-cards-grid\.table-mode-full\s*\{[\s\S]*?minmax\(560px,\s*1fr\)/,
+    /\.group-cards-grid\.table-mode-full\s*\{[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\);/,
+  );
+});
+
+test("uses four group cards per desktop row and responsive fallbacks", () => {
+  const applicationStyles = readFileSync("src/styles.css", "utf8");
+  expect(applicationStyles).toMatch(
+    /\.group-cards-grid\s*\{[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\);/,
+  );
+  expect(applicationStyles).toMatch(
+    /@media \(max-width:\s*1100px\)\s*\{[^}]*\.group-cards-grid[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/s,
+  );
+  expect(applicationStyles).toMatch(
+    /@media \(max-width:\s*640px\)\s*\{[\s\S]*?\.group-cards-grid\s*\{[^}]*grid-template-columns:\s*1fr;/,
   );
 });
 
