@@ -1,0 +1,16 @@
+.git
+.gitignore
+.agents
+.superpowers
+.env
+.env.*
+node_modules
+**/node_modules
+dist
+**/dist
+coverage
+**/coverage
+*.log
+*.err
+*.tsbuildinfo
+docs
