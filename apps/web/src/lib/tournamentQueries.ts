@@ -13,6 +13,15 @@ export type HomeTab = (typeof homeTabs)[number];
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
 const HOUR = 60 * MINUTE;
+const activeFixtureStatuses = new Set(["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"]);
+
+export function getFixturesRefetchInterval(
+  fixtures: Array<{ statusShort?: string | null }> | undefined,
+) {
+  return fixtures?.some((fixture) => activeFixtureStatuses.has(fixture.statusShort ?? ""))
+    ? 15 * SECOND
+    : MINUTE;
+}
 
 export const tournamentQueries = {
   teams: queryOptions({
@@ -25,21 +34,22 @@ export const tournamentQueries = {
     queryKey: ["tournament", "knockout"] as const,
     queryFn: fetchKnockout,
     select: (result) => result.knockout,
-    refetchInterval: 60 * SECOND,
-    staleTime: 30 * SECOND
+    refetchInterval: MINUTE,
+    staleTime: 5 * SECOND
   }),
   fixtures: queryOptions({
     queryKey: ["tournament", "fixtures"] as const,
     queryFn: fetchFixtures,
     select: (result) => result.fixtures,
-    refetchInterval: 60 * SECOND,
-    staleTime: 30 * SECOND
+    refetchInterval: (query) =>
+      getFixturesRefetchInterval(query.state.data?.fixtures),
+    staleTime: 1 * SECOND
   }),
   table: queryOptions({
     queryKey: ["tournament", "table"] as const,
     queryFn: fetchStandings,
     refetchInterval: 2 * MINUTE,
-    staleTime: 30 * SECOND
+    staleTime: 10 * SECOND
   }),
   news: queryOptions({
     queryKey: ["tournament", "news"] as const,

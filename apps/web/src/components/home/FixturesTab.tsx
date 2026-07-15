@@ -2,20 +2,20 @@ import { Calendar, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CompanyPick, Fixture } from "../../lib/types";
-
-export type FixtureFilter = "Date" | "Round" | "My Team" | "Group";
-export { FixtureFilters } from "./FixtureFilters";
+import {
+  FixtureLiveClock,
+  getFixtureStatusText,
+  liveFixtureStatuses,
+  tickingFixtureStatuses,
+} from "./FixtureLiveClock";
 
 type FixturesTabProps = {
   companyPicks: CompanyPick[];
   fixtures: Fixture[];
   participantTeamCode: string;
-  activeFilter?: FixtureFilter;
-  selectedGroup?: string;
-  showFilters?: boolean;
 };
 
-type Mode = "date" | "round" | "myteam";
+type Mode = "date" | "round" | "myteam" | "group";
 
 type FixtureDateGroup = {
   fixtures: Fixture[];
@@ -25,6 +25,7 @@ type FixtureDateGroup = {
 
 const twoMatchSlots = ["01:30", "08:30"];
 const standardKickoffSlots = ["01:30", "04:30", "07:30", "08:30", "22:30"];
+const worldCupGroups = [..."ABCDEFGHIJKL"];
 
 function getFixtureDate(value: string) {
   if (!value.includes("T")) return value;
@@ -59,42 +60,33 @@ function formatFixtureDate(value: string, style: "full" | "short") {
   }).format(new Date(`${value}T12:00:00`));
 }
 
-const liveStatuses = new Set(["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"]);
-const tickingStatuses = new Set(["1H", "2H", "ET", "LIVE"]);
-
-function formatLiveClock(totalSeconds: number, extra?: number | null) {
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = String(totalSeconds % 60).padStart(2, "0");
-  return `${minutes}:${seconds}${extra != null && extra > 0 ? ` +${extra}` : ""}`;
-}
-
-function FixtureLiveClock({ elapsed, extra, status }: {
-  elapsed: number;
-  extra?: number | null;
-  status: string;
-}) {
-  const [totalSeconds, setTotalSeconds] = useState(elapsed * 60);
-
-  useEffect(() => {
-    setTotalSeconds(elapsed * 60);
-    if (!tickingStatuses.has(status)) return;
-    const interval = window.setInterval(() => {
-      setTotalSeconds((current) => current + 1);
-    }, 1_000);
-    return () => window.clearInterval(interval);
-  }, [elapsed, status]);
-
-  return <>{formatLiveClock(totalSeconds, extra)}</>;
-}
-
 function getFixtureCenter(fixture: Fixture, kickoffTime: string) {
   const hasScore = fixture.homeScore != null && fixture.awayScore != null;
-  if (!hasScore) return { primary: kickoffTime, secondary: "" };
+  if (!hasScore) return { accessibleSecondary: "", primary: kickoffTime, secondary: "" };
   const status = fixture.statusShort ?? "";
-  const secondary = liveStatuses.has(status) && fixture.statusElapsed != null
-    ? formatLiveClock(fixture.statusElapsed * 60, fixture.statusExtra)
-    : status;
-  return { primary: `${fixture.homeScore} - ${fixture.awayScore}`, secondary };
+  const statusText = getFixtureStatusText(
+    status,
+    fixture.statusElapsed,
+    fixture.statusExtra,
+  );
+  const hasPenaltyScore =
+    status === "PEN" &&
+    fixture.penaltyHomeScore != null &&
+    fixture.penaltyAwayScore != null;
+  const penaltyScore = hasPenaltyScore
+    ? `${fixture.penaltyHomeScore}-${fixture.penaltyAwayScore}`
+    : "";
+  const accessibleSecondary = hasPenaltyScore
+    ? `${statusText}, shootout ${fixture.penaltyHomeScore} - ${fixture.penaltyAwayScore}`
+    : statusText;
+  const secondary =
+    ({ AET: "AET", PEN: penaltyScore ? `Pens ${penaltyScore}` : "Pens" } as Record<string, string>)[status] ??
+    accessibleSecondary;
+  return {
+    accessibleSecondary,
+    primary: `${fixture.homeScore} - ${fixture.awayScore}`,
+    secondary,
+  };
 }
 
 function sortFixtures(fixtures: Fixture[]) {
@@ -174,7 +166,7 @@ function FixtureMatchRow({
     : `${getFixtureDate(fixture.kickoff)}T${kickoffTime}`;
   return (
     <div
-      aria-label={`${fixture.homeTeamName} vs ${fixture.awayTeamName}: ${center.primary}${center.secondary ? `, ${center.secondary}` : ""}`}
+      aria-label={`${fixture.homeTeamName} vs ${fixture.awayTeamName}: ${center.primary}${center.accessibleSecondary ? `, ${center.accessibleSecondary}` : ""}`}
       className="fixture-match-row"
     >
       <FixtureTeam code={fixture.homeTeam} flag={fixture.homeFlag} name={fixture.homeTeamName}
@@ -182,8 +174,11 @@ function FixtureMatchRow({
       <time className="fixture-kickoff-time" dateTime={dateTime}>
         <span>{center.primary}</span>
         {center.secondary ? (
-          <small className={liveStatuses.has(fixture.statusShort ?? "") ? "is-live" : ""}>
-            {liveStatuses.has(fixture.statusShort ?? "") && fixture.statusElapsed != null ? (
+          <small
+            className={liveFixtureStatuses.has(fixture.statusShort ?? "") ? "is-live" : ""}
+            title={center.secondary !== center.accessibleSecondary ? center.accessibleSecondary : undefined}
+          >
+            {tickingFixtureStatuses.has(fixture.statusShort ?? "") && fixture.statusElapsed != null ? (
               <FixtureLiveClock
                 elapsed={fixture.statusElapsed}
                 extra={fixture.statusExtra}
@@ -332,6 +327,7 @@ export function FixturesTab({ companyPicks, fixtures, participantTeamCode }: Fix
   const [roundIndex, setRoundIndex] = useState(0);
   const [mode, setMode] = useState<Mode>("date");
   const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [showGroupPicker, setShowGroupPicker] = useState(false);
   const [panelPos, setPanelPos] = useState({ top: 0, right: 0 });
   const filterBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -387,10 +383,45 @@ export function FixturesTab({ companyPicks, fixtures, participantTeamCode }: Fix
     return groupFixturesByDate(teamFixtures, "short");
   }, [fixtures, participantTeamCode]);
 
+  const defaultGroup = useMemo(() => {
+    const participantFixture = fixtures.find(
+      (fixture) => fixture.homeTeam === participantTeamCode
+        || fixture.awayTeam === participantTeamCode,
+    );
+    return participantFixture?.group
+      ?? [...new Set(fixtures.map((fixture) => fixture.group))].sort()[0]
+      ?? worldCupGroups[0];
+  }, [fixtures, participantTeamCode]);
+  const [selectedFixtureGroup, setSelectedFixtureGroup] = useState(defaultGroup);
+  useEffect(() => {
+    setSelectedFixtureGroup(defaultGroup);
+  }, [defaultGroup]);
+  const selectedGroupIndex = worldCupGroups.indexOf(selectedFixtureGroup);
+  const groupDateGroups = useMemo(
+    () => groupFixturesByDate(
+      fixtures.filter((fixture) => fixture.group === selectedFixtureGroup),
+      "short",
+    ),
+    [fixtures, selectedFixtureGroup],
+  );
+
   function selectMode(m: Mode) {
     setMode(m);
     setShowFilterPanel(false);
+    setShowGroupPicker(false);
     if (m === "round") setRoundIndex(0);
+  }
+
+  function openGroupPicker() {
+    setMode("group");
+    setShowGroupPicker(true);
+  }
+
+  function selectGroup(group: string) {
+    setSelectedFixtureGroup(group);
+    setMode("group");
+    setShowGroupPicker(false);
+    setShowFilterPanel(false);
   }
 
   function toggleFilterPanel() {
@@ -398,7 +429,10 @@ export function FixturesTab({ companyPicks, fixtures, participantTeamCode }: Fix
       const rect = filterBtnRef.current.getBoundingClientRect();
       setPanelPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
     }
-    setShowFilterPanel((v) => !v);
+    setShowFilterPanel((v) => {
+      if (v) setShowGroupPicker(false);
+      return !v;
+    });
   }
 
   function openCalendar() {
@@ -449,6 +483,14 @@ export function FixturesTab({ companyPicks, fixtures, participantTeamCode }: Fix
             onPrev={() => setRoundIndex((i) => Math.max(0, i - 1))}
             onNext={() => setRoundIndex((i) => Math.min(roundSections.length - 1, i + 1))}
           />
+        ) : mode === "group" ? (
+          <ArrowNav
+            label={`Group ${selectedFixtureGroup}`}
+            index={selectedGroupIndex}
+            total={worldCupGroups.length}
+            onPrev={() => selectGroup(worldCupGroups[Math.max(0, selectedGroupIndex - 1)] ?? "A")}
+            onNext={() => selectGroup(worldCupGroups[Math.min(worldCupGroups.length - 1, selectedGroupIndex + 1)] ?? "L")}
+          />
         ) : (
           <ArrowNav label="My Team" index={0} total={1}
             onPrev={() => undefined} onNext={() => undefined} />
@@ -481,21 +523,63 @@ export function FixturesTab({ companyPicks, fixtures, participantTeamCode }: Fix
       {/* ── Filter panel portal ── */}
       {showFilterPanel ? createPortal(
         <>
-          <div className="fixture-filter-backdrop" aria-hidden="true" onClick={() => setShowFilterPanel(false)} />
-          <div className="fixture-filter-panel" role="menu"
-            style={{ position: "fixed", top: panelPos.top, right: panelPos.right }}>
-            <button className={`fixture-filter-option${mode === "date" ? " active" : ""}`}
-              role="menuitem" type="button" onClick={() => selectMode("date")}>
-              By Date {mode === "date" ? <span className="fixture-filter-dot" /> : null}
-            </button>
-            <button className={`fixture-filter-option${mode === "round" ? " active" : ""}`}
-              role="menuitem" type="button" onClick={() => selectMode("round")}>
-              Round {mode === "round" ? <span className="fixture-filter-dot" /> : null}
-            </button>
-            <button className={`fixture-filter-option${mode === "myteam" ? " active" : ""}`}
-              role="menuitem" type="button" onClick={() => selectMode("myteam")}>
-              My Team {mode === "myteam" ? <span className="fixture-filter-dot" /> : null}
-            </button>
+          <div className="fixture-filter-backdrop" aria-hidden="true" onClick={() => {
+            setShowFilterPanel(false);
+            setShowGroupPicker(false);
+          }} />
+          <div className="fixture-filter-panel" role={showGroupPicker ? undefined : "menu"}
+            style={{
+              position: "fixed",
+              top: panelPos.top,
+              right: panelPos.right,
+              maxHeight: `calc(100dvh - ${panelPos.top + 12}px)`,
+            }}>
+            {showGroupPicker ? (
+              <>
+                <button
+                  aria-label="Back to filter options"
+                  className="fixture-group-back"
+                  type="button"
+                  onClick={() => setShowGroupPicker(false)}
+                >
+                  <ChevronLeft aria-hidden="true" size={18} strokeWidth={2.5} />
+                  Filters
+                </button>
+                <div className="fixture-group-list" role="listbox" aria-label="Select group">
+                  {worldCupGroups.map((group) => (
+                    <button
+                      aria-selected={selectedFixtureGroup === group}
+                      className={`fixture-filter-option${selectedFixtureGroup === group ? " active" : ""}`}
+                      key={group}
+                      role="option"
+                      type="button"
+                      onClick={() => selectGroup(group)}
+                    >
+                      Group {group}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <button className={`fixture-filter-option${mode === "date" ? " active" : ""}`}
+                  role="menuitem" type="button" onClick={() => selectMode("date")}>
+                  By Date {mode === "date" ? <span className="fixture-filter-dot" /> : null}
+                </button>
+                <button className={`fixture-filter-option${mode === "round" ? " active" : ""}`}
+                  role="menuitem" type="button" onClick={() => selectMode("round")}>
+                  Round {mode === "round" ? <span className="fixture-filter-dot" /> : null}
+                </button>
+                <button className={`fixture-filter-option${mode === "myteam" ? " active" : ""}`}
+                  role="menuitem" type="button" onClick={() => selectMode("myteam")}>
+                  My Team {mode === "myteam" ? <span className="fixture-filter-dot" /> : null}
+                </button>
+                <button className={`fixture-filter-option${mode === "group" ? " active" : ""}`}
+                  role="menuitem" type="button" onClick={openGroupPicker}>
+                  Group <ChevronRight size={16} aria-hidden="true" />
+                </button>
+              </>
+            )}
           </div>
         </>,
         document.body,
@@ -530,6 +614,22 @@ export function FixturesTab({ companyPicks, fixtures, participantTeamCode }: Fix
               ))}
             </article>
           ) : <p className="empty-state-copy">No rounds available.</p>
+        ) : mode === "group" ? (
+          groupDateGroups.length ? (
+            <article className="fixture-section-card">
+              {groupDateGroups.map((dateGroup) => (
+                <div key={dateGroup.key} className="fixture-date-block">
+                  <p className="fixture-date-label">{dateGroup.label}</p>
+                  <div className="fixture-match-list">
+                    {dateGroup.fixtures.map((fixture) => (
+                      <FixtureMatchRow key={fixture.id} displayNamesByTeam={displayNamesByTeam}
+                        fixture={fixture} kickoffTime={fixtureTimes.get(fixture.id) ?? "01:30"} />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </article>
+          ) : <p className="empty-state-copy">No fixtures for this group yet.</p>
         ) : myTeamDateGroups.length ? (
           <article className="fixture-section-card">
             {myTeamDateGroups.map((dateGroup) => (
