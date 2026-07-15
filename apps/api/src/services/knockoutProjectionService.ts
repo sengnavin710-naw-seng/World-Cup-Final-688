@@ -121,39 +121,22 @@ function assignThirdPlacedTeams(
   }
 
   const assignments = new Map<string, string>();
-  const usedSlots = new Set<string>();
+  const teamByGroup = new Map(teams.map((team) => [team.group, team.teamCode]));
 
-  function assign(teamIndex: number): boolean {
-    if (teamIndex === teams.length) {
-      return true;
+  for (const slot of slots) {
+    const allocatedGroup = thirdPlaceAllocation[
+      slot.winnerGroup as keyof typeof thirdPlaceAllocation
+    ];
+    const teamCode = allocatedGroup ? teamByGroup.get(allocatedGroup) : undefined;
+
+    if (!allocatedGroup || !teamCode || !slot.candidates.has(allocatedGroup)) {
+      return new Map<string, string>();
     }
 
-    const team = teams[teamIndex];
-
-    if (!team) {
-      return false;
-    }
-
-    for (const slot of slots) {
-      if (usedSlots.has(slot.key) || !slot.candidates.has(team.group)) {
-        continue;
-      }
-
-      usedSlots.add(slot.key);
-      assignments.set(slot.key, team.teamCode);
-
-      if (assign(teamIndex + 1)) {
-        return true;
-      }
-
-      usedSlots.delete(slot.key);
-      assignments.delete(slot.key);
-    }
-
-    return false;
+    assignments.set(slot.key, teamCode);
   }
 
-  return assign(0) ? assignments : new Map<string, string>();
+  return assignments.size === teams.length ? assignments : new Map<string, string>();
 }
 
 function getCompletedGroups(fixtures: Fixture[]) {
@@ -377,9 +360,10 @@ export function projectKnockoutRounds(
 
   // Track winner of each match number so "Winner Match N" placeholders can be resolved
   const winnerByMatchNumber = new Map<number, string>();
+  const loserByMatchNumber = new Map<number, string>();
 
   function isTeamCode(s: string): boolean {
-    return s.length > 0 && !/^(Winner|Runner-up|Best third|Group|TBD)/i.test(s);
+    return s.length > 0 && !/^(Winner|Runner-up|Loser|Best third|Group|TBD)/i.test(s);
   }
 
   function liveForPair(teamA: string, teamB: string): Fixture | undefined {
@@ -387,13 +371,30 @@ export function projectKnockoutRounds(
     return fixtureByTeamPair.get([teamA, teamB].sort().join(":"));
   }
 
-  function resolveWinnerSlot(placeholder: string): string {
-    const m = placeholder.match(/^Winner Match (\d+)$/i);
-    if (m) {
-      const num = parseInt(m[1], 10);
+  function resolveMatchSlot(placeholder: string): string {
+    const winnerMatch = placeholder.match(/^Winner Match (\d+)$/i);
+    if (winnerMatch) {
+      const num = parseInt(winnerMatch[1], 10);
       return winnerByMatchNumber.get(num) ?? placeholder;
     }
+    const loserMatch = placeholder.match(/^(?:Loser|Runner-up) Match (\d+)$/i);
+    if (loserMatch) {
+      const num = parseInt(loserMatch[1], 10);
+      return loserByMatchNumber.get(num) ?? placeholder;
+    }
     return placeholder;
+  }
+
+  function recordResolvedResult(matchNumber: number, winner: string, live: Fixture) {
+    if (!isTeamCode(winner)) return;
+
+    winnerByMatchNumber.set(matchNumber, winner);
+    const loser = [live.homeTeam, live.awayTeam].find(
+      (team) => isTeamCode(team) && team !== winner,
+    );
+    if (loser) {
+      loserByMatchNumber.set(matchNumber, loser);
+    }
   }
 
   function recordWinner(
@@ -404,11 +405,11 @@ export function projectKnockoutRounds(
   ) {
     if (!live?.statusShort || !terminalFixtureStatuses.has(live.statusShort)) return;
     if (live.homeWinner === true && live.awayWinner !== true && isTeamCode(live.homeTeam)) {
-      winnerByMatchNumber.set(matchNumber, live.homeTeam);
+      recordResolvedResult(matchNumber, live.homeTeam, live);
       return;
     }
     if (live.awayWinner === true && live.homeWinner !== true && isTeamCode(live.awayTeam)) {
-      winnerByMatchNumber.set(matchNumber, live.awayTeam);
+      recordResolvedResult(matchNumber, live.awayTeam, live);
       return;
     }
     const h = live.homeScore ?? 0;
@@ -423,7 +424,7 @@ export function projectKnockoutRounds(
 
       const winner = penaltyHome > penaltyAway ? live.homeTeam : live.awayTeam;
       if (isTeamCode(winner)) {
-        winnerByMatchNumber.set(matchNumber, winner);
+        recordResolvedResult(matchNumber, winner, live);
       }
       return;
     }
@@ -433,12 +434,12 @@ export function projectKnockoutRounds(
       const winner = live.homeTeam === resolvedHome || live.homeTeam === resolvedAway
         ? live.homeTeam
         : resolvedHome;
-      winnerByMatchNumber.set(matchNumber, winner);
+      recordResolvedResult(matchNumber, winner, live);
     } else {
       const winner = live.awayTeam === resolvedAway || live.awayTeam === resolvedHome
         ? live.awayTeam
         : resolvedAway;
-      winnerByMatchNumber.set(matchNumber, winner);
+      recordResolvedResult(matchNumber, winner, live);
     }
   }
 
@@ -562,15 +563,17 @@ export function projectKnockoutRounds(
         const homePlaceholder = match.homeTeamPlaceholder ?? match.homeTeam;
         const awayPlaceholder = match.awayTeamPlaceholder ?? match.awayTeam;
 
-        const resolvedHome = resolveWinnerSlot(homePlaceholder);
-        const resolvedAway = resolveWinnerSlot(awayPlaceholder);
+        const resolvedHome = resolveMatchSlot(homePlaceholder);
+        const resolvedAway = resolveMatchSlot(awayPlaceholder);
 
         const roundFixtures = apiKnockoutFixturesByRound.get(round.round) ?? [];
-        const overlayFixture = roundFixtures.find(
-          (fixture) =>
-            fixture.kickoff.substring(0, 10) === match.kickoff.substring(0, 10) &&
-            fixture.venue === match.venue,
-        );
+        const overlayFixture =
+          roundFixtures.find((fixture) => fixture.matchNumber === match.matchNumber) ??
+          roundFixtures.find(
+            (fixture) =>
+              fixture.kickoff.substring(0, 10) === match.kickoff.substring(0, 10) &&
+              fixture.venue === match.venue,
+          );
         const live = liveForPair(resolvedHome, resolvedAway) ?? overlayFixture;
         const displayHome = isTeamCode(resolvedHome)
           ? resolvedHome

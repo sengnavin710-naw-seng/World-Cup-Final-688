@@ -88,7 +88,7 @@ export const knockout: KnockoutRound[] = [
     round: "Finals",
     matches: [
       makeKnockoutMatch(104, "Winner Match 101", "Winner Match 102", "2026-07-19", "New York New Jersey Stadium", "center", 1, 1, "FINAL"),
-      makeKnockoutMatch(103, "Runner-up Match 101", "Runner-up Match 102", "2026-07-18", "Miami Stadium", "center", 1, 2, "BRONZE-FINAL"),
+      makeKnockoutMatch(103, "Loser Match 101", "Loser Match 102", "2026-07-18", "Miami Stadium", "center", 1, 2, "BRONZE-FINAL"),
     ],
   },
 ];

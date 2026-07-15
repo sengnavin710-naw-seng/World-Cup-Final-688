@@ -167,6 +167,59 @@ test("advances the penalty shootout winner from Round of 32 into Round of 16", (
   });
 });
 
+test("advances both semi-final losers into the Bronze-final", () => {
+  const projected = projectKnockoutRounds(knockout, [], [
+    {
+      awayFlag: "",
+      awayScore: 1,
+      awayTeam: "FRA",
+      awayTeamName: "France",
+      awayWinner: false,
+      group: "",
+      homeFlag: "",
+      homeScore: 2,
+      homeTeam: "GER",
+      homeTeamName: "Germany",
+      homeWinner: true,
+      id: "api-football-semi-101",
+      kickoff: "2026-07-14T19:00:00+00:00",
+      matchNumber: 101,
+      round: "Semi-finals",
+      statusShort: "FT",
+      venue: "Dallas Stadium",
+    },
+    {
+      awayFlag: "",
+      awayScore: 2,
+      awayTeam: "ARG",
+      awayTeamName: "Argentina",
+      awayWinner: true,
+      group: "",
+      homeFlag: "",
+      homeScore: 0,
+      homeTeam: "BRA",
+      homeTeamName: "Brazil",
+      homeWinner: false,
+      id: "api-football-semi-102",
+      kickoff: "2026-07-15T19:00:00+00:00",
+      matchNumber: 102,
+      round: "Semi-finals",
+      statusShort: "FT",
+      venue: "Mercedes-Benz Stadium",
+    },
+  ]);
+  const bronzeFinal = projected
+    .find((round) => round.round === "Finals")
+    ?.matches.find((match) => match.matchNumber === 103);
+
+  expect(bronzeFinal).toMatchObject({
+    awayTeam: "BRA",
+    awayTeamConfirmed: true,
+    homeTeam: "FRA",
+    homeTeamConfirmed: true,
+  });
+});
+
 test("does not copy a known Round of 16 fixture into another unresolved bracket slot", () => {
   const projected = projectKnockoutRounds(
     knockout,
@@ -345,74 +398,74 @@ test("uses the official third-place allocation table for current as-it-stands pa
   > = {
     A: [
       { code: "MEX", points: 7 },
-      { code: "KOR", points: 5 },
-      { code: "CZE", goalDiff: 8, points: 4 },
+      { code: "ZAF", points: 5 },
+      { code: "KOR", goalDiff: -1, goalsFor: 2, points: 3, wins: 1 },
       { code: "ZAF", points: 1 },
     ],
     B: [
-      { code: "CAN", points: 7 },
-      { code: "SUI", points: 5 },
-      { code: "BIH", goalDiff: 7, points: 4 },
+      { code: "SUI", points: 7 },
+      { code: "CAN", points: 5 },
+      { code: "BIH", goalDiff: -1, goalsFor: 5, points: 4, wins: 1 },
       { code: "QAT", points: 1 },
     ],
     C: [
       { code: "BRA", points: 7 },
       { code: "MAR", points: 5 },
-      { code: "SCO", goalDiff: 6, points: 4 },
+      { code: "SCO", goalDiff: -3, goalsFor: 1, points: 3, wins: 1 },
       { code: "HTI", points: 1 },
     ],
     D: [
       { code: "USA", points: 7 },
       { code: "AUS", points: 5 },
-      { code: "PAR", goalDiff: 1, points: 1 },
+      { code: "PAR", goalDiff: -2, goalsFor: 2, points: 4, wins: 1 },
       { code: "TUR", points: 0 },
     ],
     E: [
       { code: "GER", points: 7 },
-      { code: "ECU", points: 5 },
-      { code: "CIV", goalDiff: 5, points: 4 },
+      { code: "CIV", points: 5 },
+      { code: "ECU", goalDiff: 0, goalsFor: 2, points: 4, wins: 1 },
       { code: "CUW", points: 1 },
     ],
     F: [
       { code: "NED", points: 7 },
       { code: "JPN", points: 5 },
-      { code: "SWE", goalDiff: 4, points: 4 },
+      { code: "SWE", goalDiff: 0, goalsFor: 7, points: 4, wins: 1 },
       { code: "TUN", points: 1 },
     ],
     G: [
       { code: "BEL", points: 7 },
-      { code: "IRN", points: 5 },
-      { code: "EGY", goalDiff: 1, points: 1 },
+      { code: "EGY", points: 5 },
+      { code: "IRN", goalDiff: 0, goalsFor: 3, points: 3, wins: 0 },
       { code: "NZL", points: 0 },
     ],
     H: [
       { code: "ESP", points: 7 },
-      { code: "URU", points: 5 },
-      { code: "KSA", goalDiff: 1, points: 1 },
+      { code: "CPV", points: 5 },
+      { code: "URU", goalDiff: -1, goalsFor: 3, points: 2, wins: 0 },
       { code: "CPV", points: 0 },
     ],
     I: [
-      { code: "NOR", points: 7 },
-      { code: "FRA", points: 5 },
-      { code: "IRQ", goalDiff: 1, points: 1 },
+      { code: "FRA", points: 7 },
+      { code: "NOR", points: 5 },
+      { code: "SEN", goalDiff: 2, goalsFor: 8, points: 3, wins: 1 },
       { code: "SEN", points: 0 },
     ],
     J: [
       { code: "ARG", points: 7 },
       { code: "AUT", points: 5 },
-      { code: "ALG", goalDiff: 3, points: 4 },
+      { code: "ALG", goalDiff: -2, goalsFor: 5, points: 4, wins: 1 },
       { code: "JOR", points: 1 },
     ],
     K: [
-      { code: "POR", points: 7 },
-      { code: "COL", points: 5 },
-      { code: "UZB", goalDiff: 2, points: 4 },
+      { code: "COL", points: 7 },
+      { code: "POR", points: 5 },
+      { code: "COD", goalDiff: 1, goalsFor: 4, points: 4, wins: 1 },
       { code: "COD", points: 1 },
     ],
     L: [
       { code: "ENG", points: 7 },
       { code: "CRO", points: 5 },
-      { code: "PAN", goalDiff: 1, points: 4 },
+      { code: "GHA", goalDiff: 0, goalsFor: 2, points: 4, wins: 1 },
       { code: "GHA", points: 1 },
     ],
   };
@@ -425,11 +478,11 @@ test("uses the official third-place allocation table for current as-it-stands pa
   const match77 = projected[0]?.matches.find((match) => match.matchNumber === 77);
 
   expect(match74).toMatchObject({
-    awayTeam: "SCO",
+    awayTeam: "PAR",
     homeTeam: "GER",
   });
   expect(match77).toMatchObject({
     awayTeam: "SWE",
-    homeTeam: "NOR",
+    homeTeam: "FRA",
   });
 });
