@@ -121,6 +121,9 @@ test("shows desktop owner names in wider cards with ellipsis overflow", () => {
   expect(styles).toMatch(
     /\.knockout-card \.knockout-owner-name\s*\{[^}]*display:\s*block;[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/s,
   );
+  expect(styles).toMatch(
+    /\.knockout-card \.knockout-owner-name\s*\{[^}]*color:\s*rgba\(255,\s*255,\s*255,\s*0\.95\);[^}]*font-size:\s*0\.68rem;[^}]*font-weight:\s*600;/s,
+  );
 });
 
 test("places the desktop final badges fully below the match date", () => {

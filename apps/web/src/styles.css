@@ -874,8 +874,9 @@ button {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  min-width: 180px;
+  width: min(210px, calc(100vw - 16px));
   padding: 8px;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: white;
@@ -911,6 +912,43 @@ button {
 
 .fixture-filter-option.active {
   background: rgba(232, 246, 255, 0.96);
+  color: var(--primary);
+}
+
+.fixture-group-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.fixture-group-list .fixture-filter-option {
+  flex: 0 0 auto;
+  justify-content: flex-start;
+  padding-block: 9px;
+}
+
+.fixture-group-back {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-align: left;
+}
+
+.fixture-group-back:hover {
   color: var(--primary);
 }
 
@@ -1387,6 +1425,9 @@ button {
 
 .knockout-card .knockout-owner-name {
   display: block;
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 0.68rem;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

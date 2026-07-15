@@ -253,7 +253,7 @@ test("does not block the knockout dashboard while team availability is pending",
 test("shows cached tab content while its query refreshes", async () => {
   const { queryClient } = render(<App />);
   fireEvent.click(screen.getByRole("tab", { name: "Fixtures" }));
-  expect(await screen.findByLabelText("Fixture filters")).toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: "Filter options" })).toBeInTheDocument();
 
   const currentFetch = global.fetch;
   global.fetch = vi.fn((input, init) => {
@@ -272,7 +272,7 @@ test("shows cached tab content while its query refreshes", async () => {
     await queryClient.invalidateQueries({ queryKey: ["tournament", "fixtures"] });
   });
 
-  expect(screen.getByLabelText("Fixture filters")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Filter options" })).toBeInTheDocument();
   expect(screen.queryByLabelText("Loading Fixtures")).not.toBeInTheDocument();
   expect(
     await screen.findByText("Showing saved data. Refresh failed."),
@@ -455,16 +455,16 @@ test("falls back to the first fixture group when the participant has no fixtures
   render(<App />);
 
   fireEvent.click(screen.getByRole("tab", { name: "Fixtures" }));
-  const groupFilter = await screen.findByRole("button", { name: /Group/i });
-  fireEvent.click(groupFilter);
+  fireEvent.click(await screen.findByRole("button", { name: "Filter options" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Group" }));
 
   expect(
-    await screen.findByRole("heading", { name: "Group C" }),
-  ).toBeInTheDocument();
+    await screen.findByRole("option", { name: "Group C" }),
+  ).toHaveAttribute("aria-selected", "true");
   expect(screen.getByText("Brazil")).toBeInTheDocument();
 });
 
-test("uses the shared mobile gap above the knockout surface", async () => {
+test("uses the current responsive spacing around the knockout surface", async () => {
   render(<App />);
 
   const knockoutBracket = await screen.findByLabelText("World Cup knockout bracket");
@@ -473,7 +473,7 @@ test("uses the shared mobile gap above the knockout surface", async () => {
   expect(knockoutBracket.closest(".tab-panel")).toHaveClass("tab-panel-knockout");
   expect(applicationStyles).toMatch(/\.tab-panel\s*\{[^}]*padding:\s*20px;/);
   expect(applicationStyles).toMatch(
-    /\.tab-panel-knockout\s*\{[^}]*padding:\s*0;/,
+    /\.tab-panel-knockout\s*\{[^}]*padding:\s*16px\s+0\s+0;/,
   );
   expect(applicationStyles).toMatch(
     /@media\s*\(max-width:\s*760px\)[\s\S]*?\.home-chrome\s*\{[^}]*margin-bottom:\s*8px;/,
@@ -572,20 +572,23 @@ test("uses the same page frame while leaving the knockout tab", async () => {
   expect(chrome).not.toHaveClass("home-chrome-knockout");
 });
 
-test("renders fixture filters in a toolbar above the fixtures panel", async () => {
+test("renders fixture filtering in the fixtures navigation bar", async () => {
   render(<App />);
 
   fireEvent.click(screen.getByRole("tab", { name: "Fixtures" }));
 
-  const fixtureFilters = await screen.findByLabelText("Fixture filters");
+  const filterButton = await screen.findByRole("button", { name: "Filter options" });
   const fixtureList = document.querySelector(".fixture-list");
 
-  expect(fixtureFilters.closest(".fixture-shell-toolbar")).toBeInTheDocument();
-  expect(fixtureFilters.closest(".tab-carousel-slide")).toBeInTheDocument();
-  expect(fixtureFilters.closest(".tab-panel")).not.toBeInTheDocument();
-  expect(fixtureFilters).toHaveClass("fixture-filter-row-fill");
-  expect(fixtureFilters.querySelectorAll("button")).toHaveLength(4);
+  expect(filterButton.closest(".fixture-nav-bar")).toBeInTheDocument();
+  expect(filterButton.closest(".tab-panel")).toHaveClass("tab-panel-fixtures");
   expect(fixtureList?.closest(".tab-panel")).toHaveClass("tab-panel-fixtures");
+
+  fireEvent.click(filterButton);
+  expect(screen.getByRole("menuitem", { name: "By Date" })).toBeInTheDocument();
+  expect(screen.getByRole("menuitem", { name: "Round" })).toBeInTheDocument();
+  expect(screen.getByRole("menuitem", { name: "My Team" })).toBeInTheDocument();
+  expect(screen.getByRole("menuitem", { name: "Group" })).toBeInTheDocument();
 });
 
 test("uses the multilingual application font stack", () => {
