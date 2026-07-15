@@ -36,7 +36,7 @@ const standings: GroupStanding[] = [
   },
 ];
 
-test("shows a display name beneath picked table teams", () => {
+test("shows a display name inline with picked table teams", () => {
   render(
     <TableTab
       companyPicks={[
@@ -53,9 +53,7 @@ test("shows a display name beneath picked table teams", () => {
     />,
   );
 
-  expect(screen.getByText("Mexico")).toBeInTheDocument();
-  expect(screen.getByText(BURMESE_NAME)).toBeInTheDocument();
-  expect(screen.getByText(BURMESE_NAME)).toHaveClass("team-owner-name");
+  expect(screen.getByText(`Mexico (${BURMESE_NAME})`)).toHaveClass("table-team-name");
 });
 
 test("renders full standings in a responsive horizontal table", () => {

@@ -97,6 +97,7 @@ test("traps focus within the dialog", () => {
   render(<DisplayNameDialog {...defaultProps} />);
 
   const input = screen.getByLabelText("Display name");
+  const closeButton = screen.getByRole("button", { name: "Close" });
   const cancelButton = screen.getByRole("button", { name: "Cancel" });
   const saveButton = screen.getByRole("button", { name: "Save" });
 
@@ -109,10 +110,13 @@ test("traps focus within the dialog", () => {
   expect(saveButton).toHaveFocus();
 
   fireEvent.keyDown(saveButton, { key: "Tab" });
+  expect(closeButton).toHaveFocus();
+
+  fireEvent.keyDown(closeButton, { key: "Tab" });
   expect(input).toHaveFocus();
 
   fireEvent.keyDown(input, { key: "Tab", shiftKey: true });
-  expect(saveButton).toHaveFocus();
+  expect(closeButton).toHaveFocus();
 });
 
 test("cancels with Escape unless submitting", () => {
