@@ -1,160 +1,80 @@
-# ⚽ World Cup Festival 688
+# World Cup Festival 688
 
-A real-time World Cup 2026 fantasy tournament web app.  
-Participants pick a national team, track fixtures, knockout brackets, standings, and news.
+English | [ภาษาไทย](README.th.md)
 
----
+World Cup Festival 688 is a responsive World Cup 2026 companion app. A participant chooses one national team, returns on the same browser through a device identity, and follows fixtures, standings, knockout projections, team ownership, and news.
 
-## Tech Stack
+## Stack
 
 | Layer | Technology |
 |---|---|
-| Frontend | React 18 + TypeScript + Vite |
-| Backend API | Node.js + Express + TypeScript |
-| Database | Supabase (PostgreSQL) |
-| Live Fixtures | API-Football (api-sports.io) |
-| Process Manager | PM2 |
-| Web Server | Nginx |
+| Web | React 19, TypeScript, Vite, TanStack Query |
+| API | Node.js, Express, TypeScript |
+| Data | Supabase PostgreSQL with an in-memory development fallback |
+| Tournament feeds | API-Football and RSS |
+| Production | Docker Compose and Nginx |
 
----
+## Quick start
 
-## Project Structure
-
-```
-/
-├── apps/
-│   ├── api/          # Express API server (Node.js)
-│   │   └── src/
-│   │       ├── data/         # Static team & allocation data
-│   │       ├── routes/       # API route handlers
-│   │       ├── services/     # Business logic (fixtures, knockout, etc.)
-│   │       └── index.ts      # Entry point
-│   └── web/          # React frontend (Vite)
-│       └── src/
-│           ├── components/   # UI components
-│           ├── hooks/        # Custom React hooks
-│           └── lib/          # API client & utilities
-├── supabase/         # Database schema & migrations
-├── .env.example      # Environment variable template
-└── package.json      # Root workspace config
-```
-
----
-
-## Prerequisites
-
-- **Node.js** v20 LTS — https://nodejs.org
-- **npm** v10+
-- **Supabase** account — https://supabase.com (free tier is fine)
-- **API-Football** key — https://www.api-football.com (free: 100 req/day)
-
----
-
-## Local Development Setup
-
-### 1. Install dependencies
+Requirements: Node.js 22 and npm 10 or newer.
 
 ```bash
 npm install
+npm run dev:api
 ```
 
-### 2. Create environment files
-
-**`apps/api/.env`** (copy from `.env.example` and fill in your values):
-```env
-NODE_ENV=development
-PORT=3001
-SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-SUPABASE_SECRET_KEY=your_supabase_anon_key
-SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
-FOOTBALL_API_BASE_URL=https://v3.football.api-sports.io
-FOOTBALL_API_KEY=your_football_api_key
-FOOTBALL_WORLD_CUP_LEAGUE_ID=1
-FOOTBALL_WORLD_CUP_SEASON=2026
-FOOTBALL_API_CACHE_TTL_MS=60000
-CORS_EXTRA_ORIGINS=
-```
-
-**`apps/web/.env`**:
-```env
-VITE_API_BASE_URL=http://localhost:3001
-VITE_BRAND_NAME=World Cup Festival 688
-```
-
-### 3. Set up Supabase database
-
-Run the SQL schema from `supabase/` folder in your Supabase project's SQL editor.
-
-### 4. Start development servers
+In a second terminal:
 
 ```bash
-# Terminal 1 — API server
-npm run dev --workspace=apps/api
-
-# Terminal 2 — Web frontend
-npm run dev --workspace=apps/web
+npm run dev:web
 ```
 
-- Web: http://localhost:5173  
-- API: http://localhost:3001/api/health
+Open `http://localhost:5173`. The API health endpoint is `http://localhost:3001/health`.
 
----
+Create `apps/api/.env` and `apps/web/.env` before local development. See [Configuration](docs/en/CONFIGURATION.md) for the required values.
 
-## Production Deployment (VPS / Ubuntu 22.04)
-
-### Build
+## Docker
 
 ```bash
-npm run build --workspace=apps/api
-npm run build --workspace=apps/web
+docker compose up -d --build
+docker compose ps
 ```
 
-### Start API with PM2
+Open `http://localhost:8088`. Stop the stack with `docker compose down`.
+
+## Quality checks
 
 ```bash
-pm2 start apps/api/dist/index.js --name wcf688-api
-pm2 save
+npm run lint
+npm test
+npm run build
 ```
 
-### Nginx config
+## Documentation
 
-Point Nginx root to `apps/web/dist/` and proxy `/api/` to `http://localhost:3001`.
-
-### Update deployment
-
-```bash
-git pull origin main
-npm run build --workspace=apps/api
-npm run build --workspace=apps/web
-pm2 restart wcf688-api
-```
-
----
-
-## Key API Endpoints
-
-| Method | Endpoint | Description |
+| Topic | English | ภาษาไทย |
 |---|---|---|
-| GET | `/api/health` | Health check |
-| GET | `/api/tournament` | All fixtures, teams, standings |
-| GET | `/api/teams` | Available teams |
-| POST | `/api/select-team` | Register device + pick team |
-| PATCH | `/api/display-name` | Update display name |
+| Development | [Development](docs/en/DEVELOPMENT.md) | [การพัฒนา](docs/th/DEVELOPMENT.md) |
+| Architecture | [Architecture](docs/en/ARCHITECTURE.md) | [สถาปัตยกรรม](docs/th/ARCHITECTURE.md) |
+| Domain | [Domain](docs/en/DOMAIN.md) | [คำศัพท์และกฎระบบ](docs/th/DOMAIN.md) |
+| Configuration | [Configuration](docs/en/CONFIGURATION.md) | [การตั้งค่า](docs/th/CONFIGURATION.md) |
+| API | [API](docs/en/API.md) | [API](docs/th/API.md) |
+| Deployment | [Deployment](docs/en/DEPLOYMENT.md) | [การติดตั้งใช้งาน](docs/th/DEPLOYMENT.md) |
+| Operations | [Operations](docs/en/OPERATIONS.md) | [การดูแลระบบ](docs/th/OPERATIONS.md) |
+| Testing | [Testing](docs/en/TESTING.md) | [การทดสอบ](docs/th/TESTING.md) |
 
----
+## Repository layout
 
-## Environment Variables Reference
+```text
+apps/web/             React frontend
+apps/api/             Express API
+supabase/migrations/  Database migrations
+docs/en/              English documentation
+docs/th/              Thai documentation
+Dockerfile.web        Web production image
+Dockerfile.api        API production image
+docker-compose.yml    Local/VPS container stack
+nginx.conf            Static hosting and API proxy
+```
 
-| Variable | Required | Description |
-|---|---|---|
-| `PORT` | ✅ | API server port (default: 3001) |
-| `SUPABASE_URL` | ✅ | Supabase project URL |
-| `SUPABASE_SECRET_KEY` | ✅ | Supabase anon/public key |
-| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Supabase service role key (admin) |
-| `FOOTBALL_API_KEY` | ✅ | API-Football key |
-| `FOOTBALL_WORLD_CUP_LEAGUE_ID` | ✅ | League ID (World Cup 2026 = 1) |
-| `FOOTBALL_WORLD_CUP_SEASON` | ✅ | Season year (2026) |
-| `FOOTBALL_API_CACHE_TTL_MS` | ❌ | Cache duration ms (default: 60000) |
-| `CORS_EXTRA_ORIGINS` | ❌ | Extra allowed CORS origins |
-| `VITE_API_BASE_URL` | ✅ (web) | API URL used by frontend |
-| `VITE_BRAND_NAME` | ❌ | App title shown in UI |
+Never commit `.env` files or expose server-side keys through a `VITE_*` variable.
