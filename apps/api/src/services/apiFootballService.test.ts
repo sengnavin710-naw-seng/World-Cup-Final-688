@@ -2,6 +2,7 @@ import {
   fetchApiFootballFixtures,
   mapApiFootballFixtures,
   mapApiFootballStandings,
+  readApiFootballConfig,
 } from "./apiFootballService";
 
 const config = {
@@ -11,6 +12,39 @@ const config = {
   leagueId: "1",
   season: "2026",
 };
+
+test("uses separate default cache windows for fixtures and standings", () => {
+  const originalApiKey = process.env.FOOTBALL_API_KEY;
+  const originalLeagueId = process.env.FOOTBALL_WORLD_CUP_LEAGUE_ID;
+  const originalFixturesTtl = process.env.FOOTBALL_API_CACHE_TTL_MS;
+  const originalStandingsTtl = process.env.FOOTBALL_API_STANDINGS_CACHE_TTL_MS;
+
+  process.env.FOOTBALL_API_KEY = "test-key";
+  process.env.FOOTBALL_WORLD_CUP_LEAGUE_ID = "1";
+  delete process.env.FOOTBALL_API_CACHE_TTL_MS;
+  delete process.env.FOOTBALL_API_STANDINGS_CACHE_TTL_MS;
+
+  try {
+    expect(readApiFootballConfig()).toEqual(
+      expect.objectContaining({
+        cacheTtlMs: 15_000,
+        standingsCacheTtlMs: 300_000,
+      }),
+    );
+  } finally {
+    if (originalApiKey === undefined) delete process.env.FOOTBALL_API_KEY;
+    else process.env.FOOTBALL_API_KEY = originalApiKey;
+    if (originalLeagueId === undefined) delete process.env.FOOTBALL_WORLD_CUP_LEAGUE_ID;
+    else process.env.FOOTBALL_WORLD_CUP_LEAGUE_ID = originalLeagueId;
+    if (originalFixturesTtl === undefined) delete process.env.FOOTBALL_API_CACHE_TTL_MS;
+    else process.env.FOOTBALL_API_CACHE_TTL_MS = originalFixturesTtl;
+    if (originalStandingsTtl === undefined) {
+      delete process.env.FOOTBALL_API_STANDINGS_CACHE_TTL_MS;
+    } else {
+      process.env.FOOTBALL_API_STANDINGS_CACHE_TTL_MS = originalStandingsTtl;
+    }
+  }
+});
 
 test("maps API-Football fixtures to the app fixture shape", () => {
   const fixtures = mapApiFootballFixtures([

@@ -153,6 +153,40 @@ test("fixtures endpoint uses API-Football data when it is available", async () =
   ]);
 });
 
+test("fixtures endpoint falls back to static data when API-Football is unreachable", async () => {
+  process.env.FOOTBALL_API_BASE_URL = "https://v3.football.api-sports.io";
+  process.env.FOOTBALL_API_KEY = "test-key";
+  process.env.FOOTBALL_WORLD_CUP_LEAGUE_ID = "1";
+  process.env.FOOTBALL_WORLD_CUP_SEASON = "2026";
+  vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network unavailable"));
+
+  const app = createServer();
+  const response = await request(app).get("/api/tournament/fixtures");
+
+  expect(response.status).toBe(200);
+  expect(response.body.fixtures).toHaveLength(72);
+  expect(response.body.fixtures[0]).toMatchObject({
+    awayTeam: "ZAF",
+    homeTeam: "MEX",
+    matchNumber: 1,
+  });
+});
+
+test("table endpoint falls back to static standings when API-Football is unreachable", async () => {
+  process.env.FOOTBALL_API_BASE_URL = "https://v3.football.api-sports.io";
+  process.env.FOOTBALL_API_KEY = "test-key";
+  process.env.FOOTBALL_WORLD_CUP_LEAGUE_ID = "1";
+  process.env.FOOTBALL_WORLD_CUP_SEASON = "2026";
+  vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network unavailable"));
+
+  const app = createServer();
+  const response = await request(app).get("/api/tournament/table");
+
+  expect(response.status).toBe(200);
+  expect(response.body.standings).toHaveLength(12);
+  expect(response.body.standings[0]).toMatchObject({ group: "A" });
+});
+
 test("knockout endpoint projects confirmed group positions from API-Football", async () => {
   process.env.FOOTBALL_API_BASE_URL = "https://v3.football.api-sports.io";
   process.env.FOOTBALL_API_KEY = "test-key";

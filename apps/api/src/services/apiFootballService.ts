@@ -7,6 +7,7 @@ export type ApiFootballConfig = {
   cacheTtlMs: number;
   leagueId: string;
   season: string;
+  standingsCacheTtlMs?: number;
 };
 
 type ApiFootballTeam = {
@@ -331,9 +332,12 @@ export function readApiFootballConfig(): ApiFootballConfig | null {
   return {
     apiKey,
     baseUrl,
-    cacheTtlMs: Number(process.env.FOOTBALL_API_CACHE_TTL_MS ?? 60 * 1000),
+    cacheTtlMs: Number(process.env.FOOTBALL_API_CACHE_TTL_MS ?? 15 * 1000),
     leagueId,
     season,
+    standingsCacheTtlMs: Number(
+      process.env.FOOTBALL_API_STANDINGS_CACHE_TTL_MS ?? 5 * 60 * 1000,
+    ),
   };
 }
 
@@ -428,7 +432,10 @@ export async function getApiFootballStandings() {
     return null;
   }
 
-  return getCached("api-football-standings", config.cacheTtlMs, () =>
+  return getCached(
+    "api-football-standings",
+    config.standingsCacheTtlMs ?? config.cacheTtlMs,
+    () =>
     fetchApiFootballStandings(config),
   );
 }

@@ -218,12 +218,20 @@ export async function getKnockoutRounds() {
 }
 
 export async function getFixtures() {
-  return (await getApiFootballFixtures()) ?? fixtures;
+  try {
+    return (await getApiFootballFixtures()) ?? fixtures;
+  } catch {
+    return fixtures;
+  }
 }
 
 export async function getStandings() {
   const { standings: staticStandings } = await import("../data/tournamentData");
-  return (await getApiFootballStandings()) ?? staticStandings;
+  try {
+    return (await getApiFootballStandings()) ?? staticStandings;
+  } catch {
+    return staticStandings;
+  }
 }
 
 export function getNews() {
